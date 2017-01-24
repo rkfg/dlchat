@@ -22,7 +22,9 @@ import java.util.concurrent.TimeUnit;
 
 import org.deeplearning4j.api.storage.StatsStorage;
 import org.deeplearning4j.nn.api.OptimizationAlgorithm;
+import org.deeplearning4j.nn.conf.BackpropType;
 import org.deeplearning4j.nn.conf.ComputationGraphConfiguration;
+import org.deeplearning4j.nn.conf.GradientNormalization;
 import org.deeplearning4j.nn.conf.ComputationGraphConfiguration.GraphBuilder;
 import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
 import org.deeplearning4j.nn.conf.Updater;
@@ -58,9 +60,14 @@ public class Main {
     private static final Random rnd = new Random(new Date().getTime());
     private static final long SAVE_EACH_MS = TimeUnit.MINUTES.toMillis(10);
     private static final long TEST_EACH_MS = TimeUnit.MINUTES.toMillis(1);
-    private static final int MAX_DICT = 2000;
+    private static final int MAX_DICT = 5000;
+    private static final int TBPTT_SIZE = 30;
+    private static final double LEARNING_RATE = 1e-3;
+    private static final double L2 = 1e-3;
+    private static final double RMS_DECAY = 0.95;
 
     public static void main(String[] args) throws IOException {
+        Nd4j.ENFORCE_NUMERICAL_STABILITY = true;
         int idx = 2;
         dict.put("<unk>", 0);
         revDict.put(0, "<unk>");
@@ -82,25 +89,25 @@ public class Main {
         prepareData(idx);
 
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
-        builder.iterations(3).learningRate(1e-1).optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT).seed(123)
-                .miniBatch(true).updater(Updater.RMSPROP).weightInit(WeightInit.XAVIER);
+        builder.iterations(1).learningRate(LEARNING_RATE).rmsDecay(RMS_DECAY)
+                .optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT).seed(123).miniBatch(true).updater(Updater.RMSPROP)
+                .weightInit(WeightInit.XAVIER).regularization(true).l2(L2)
+                .gradientNormalization(GradientNormalization.RenormalizeL2PerLayer);
 
-        GraphBuilder graphBuilder = builder.graphBuilder();
+        GraphBuilder graphBuilder = builder.graphBuilder().pretrain(false).backprop(true).backpropType(BackpropType.TruncatedBPTT)
+                .tBPTTBackwardLength(TBPTT_SIZE).tBPTTForwardLength(TBPTT_SIZE);
         graphBuilder.addInputs("firstLine", "secondLine").setInputTypes(InputType.recurrent(dict.size()), InputType.recurrent(dict.size()))
-                .addLayer("encoder",
-                        new GravesLSTM.Builder().nIn(dict.size()).nOut(HIDDEN_LAYER_WIDTH).activation(Activation.SOFTSIGN).build(),
+                .addLayer("encoder", new GravesLSTM.Builder().nIn(dict.size()).nOut(HIDDEN_LAYER_WIDTH).activation(Activation.TANH).build(),
                         "firstLine")
                 .addVertex("lastTimeStep", new LastTimeStepVertex("firstLine"), "encoder")
                 .addVertex("duplicateTimeStep", new DuplicateToTimeSeriesVertex("secondLine"), "lastTimeStep")
                 .addLayer("decoder",
-                        new GravesLSTM.Builder().nIn(dict.size() + HIDDEN_LAYER_WIDTH).nOut(HIDDEN_LAYER_WIDTH)
-                                .activation(Activation.SOFTSIGN).build(),
+                        new GravesLSTM.Builder().nIn(dict.size() + HIDDEN_LAYER_WIDTH).nOut(HIDDEN_LAYER_WIDTH).activation(Activation.TANH)
+                                .build(),
                         "secondLine", "duplicateTimeStep")
-                .addLayer("output",
-                        new RnnOutputLayer.Builder().nIn(HIDDEN_LAYER_WIDTH).nOut(dict.size()).activation(Activation.SOFTMAX)
-                                .lossFunction(LossFunctions.LossFunction.MCXENT).build(),
-                        "decoder")
-                .setOutputs("output").pretrain(false).backprop(true);
+                .addLayer("output", new RnnOutputLayer.Builder().nIn(HIDDEN_LAYER_WIDTH).nOut(dict.size()).activation(Activation.SOFTMAX)
+                        .lossFunction(LossFunctions.LossFunction.MCXENT).build(), "decoder")
+                .setOutputs("output");
 
         ComputationGraphConfiguration conf = graphBuilder.build();
         ComputationGraph net;
