@@ -65,6 +65,8 @@ public class Main {
     private static final double LEARNING_RATE = 1e-3;
     private static final double L2 = 1e-3;
     private static final double RMS_DECAY = 0.95;
+    private static final int SEQUENCE_SIZE = 1000;
+    private static final boolean DEBUG = false;
 
     public static void main(String[] args) throws IOException {
         Nd4j.ENFORCE_NUMERICAL_STABILITY = true;
@@ -152,32 +154,52 @@ public class Main {
                     }
                     batchSize++;
                 }
+                rowSize = SEQUENCE_SIZE;
                 INDArray input = Nd4j.zeros(batchSize, dict.size(), rowSize);
-                INDArray decode = Nd4j.zeros(batchSize, dict.size(), rowSize);
                 INDArray prediction = Nd4j.zeros(batchSize, dict.size(), rowSize);
+                INDArray decode = Nd4j.zeros(batchSize, dict.size(), rowSize);
                 INDArray inputMask = Nd4j.zeros(batchSize, rowSize);
-                INDArray decodeMask = Nd4j.zeros(batchSize, rowSize);
                 INDArray predictionMask = Nd4j.zeros(batchSize, rowSize);
+                INDArray decodeMask = Nd4j.zeros(batchSize, rowSize);
                 for (int j = 0; j < MINIBATCH_SIZE; j++) {
-                    if (i > logs.size() - 2) {
-                        break;
+                    int samplePosIn = 0;
+                    int samplePosPred = 0;
+                    List<Integer> rowIn = new ArrayList<>();
+                    List<Integer> rowPred = new ArrayList<>();
+                    while (rowIn.size() < SEQUENCE_SIZE && rowPred.size() < SEQUENCE_SIZE && i < logs.size() - 2) {
+                        rowIn.addAll(logs.get(i));
+                        rowPred.addAll(logs.get(i + 1));
+                        i++;
                     }
-                    List<Integer> rowIn = new ArrayList<>(logs.get(i));
-                    Collections.reverse(rowIn);
-                    List<Integer> rowPred = logs.get(i + 1);
-                    for (int samplePos = 0; samplePos < rowSize; samplePos++) {
-                        if (samplePos < rowIn.size()) {
-                            input.putScalar(new int[] { j, rowIn.get(samplePos), samplePos }, 1);
-                            inputMask.putScalar(new int[] { j, samplePos }, 1);
+                    if (DEBUG) {
+                        System.out.println("Row in: " + rowIn);
+                        INDArray inTensor = input.tensorAlongDimension(j, 2, 1);
+                        INDArray inputMax = Nd4j.argMax(inTensor, 0);
+                        System.out.println("inputMax tensor: " + inputMax);
+                        INDArray predTensor = prediction.tensorAlongDimension(j, 2, 1);
+                        INDArray predMax = Nd4j.argMax(predTensor, 0);
+                        System.out.println("predMax tensor: " + predMax);
+                        System.out.print("IN: ");
+                        for (int sPos = 0; sPos < inputMax.size(1); sPos++) {
+                            System.out.print(revDict.get(inputMax.getInt(sPos)));
                         }
-                        if (samplePos < rowPred.size()) {
-                            prediction.putScalar(new int[] { j, rowPred.get(samplePos), samplePos }, 1);
-                            predictionMask.putScalar(new int[] { j, samplePos }, 1);
-                            decode.putScalar(new int[] { j, 0, samplePos }, 1);
-                            decodeMask.putScalar(new int[] { j, samplePos }, 1);
+                        System.out.println();
+                        System.out.print("OUT: ");
+                        for (int sPos = 0; sPos < predMax.size(1); sPos++) {
+                            System.out.print(revDict.get(predMax.getInt(sPos)));
                         }
+                        System.out.println();
                     }
-                    i++;
+                    for (int seq = 0; seq < rowIn.size() && seq < SEQUENCE_SIZE && seq < rowPred.size(); seq++) {
+                        input.putScalar(new int[] { j, rowIn.get(seq), samplePosIn }, 1);
+                        inputMask.putScalar(new int[] { j, samplePosIn }, 1);
+                        prediction.putScalar(new int[] { j, rowPred.get(seq), samplePosPred }, 1);
+                        predictionMask.putScalar(new int[] { j, samplePosPred }, 1);
+                        decode.putScalar(new int[] { j, 0, samplePosPred }, 1);
+                        decodeMask.putScalar(new int[] { j, samplePosPred }, 1);
+                        samplePosIn++;
+                        samplePosPred++;
+                    }
                 }
                 net.fit(new INDArray[] { input, decode }, new INDArray[] { prediction }, new INDArray[] { inputMask, decodeMask },
                         new INDArray[] { predictionMask });
@@ -243,7 +265,6 @@ public class Main {
     }
 
     private static void output(ComputationGraph net, List<Integer> rowIn, boolean printUnknowns) {
-        Collections.reverse(rowIn);
         INDArray testIn = Nd4j.zeros(1, dict.size(), rowIn.size());
         int samplePos = 0;
         INDArray testDecode = Nd4j.zeros(1, dict.size(), MAX_OUTPUT);
