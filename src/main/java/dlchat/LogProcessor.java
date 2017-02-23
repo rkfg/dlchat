@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class LogProcessor {
-    public static final String SPECIALS = "!\"#$;%^:?*()[]{}<>«»',.–—=+";
+    public static final String SPECIALS = "!\"#$;%^:?*()[]{}<>«»,.–—=+…";
     private Set<String> dictSet = new HashSet<>();
     private Map<String, Integer> freq = new HashMap<>();
     private Map<String, Integer> dict = new HashMap<>();
@@ -37,27 +37,29 @@ public class LogProcessor {
             String lastNick = "";
             String lastLine = "";
             while ((line = br.readLine()) != null) {
-                String[] nickContent = line.toLowerCase().split("\\|", 2);
-                if (nickContent.length > 1) {
-                    if (nickContent[0].equals(lastNick)) {
+                String[] nickContent = line.toLowerCase().split(" \\+\\+\\+\\$\\+\\+\\+ ", 5);
+                if (nickContent.length > 4) {
+                    if (nickContent[1].equals(lastNick)) {
                         if (!lastLine.isEmpty()) {
                             if (!SPECIALS.contains(lastLine.substring(lastLine.length() - 1))) {
                                 lastLine += ",";
                             }
-                            lastLine += " " + nickContent[1];
+                            lastLine += " " + nickContent[4];
                         } else {
-                            lastLine = nickContent[1];
+                            lastLine = nickContent[4];
                         }
                     } else {
                         if (lastLine.isEmpty()) {
-                            lastLine = nickContent[1];
+                            lastLine = nickContent[4];
+                        } else {
+                            processLine(lastLine);
+                            lastLine = nickContent[4];
                         }
-                        processLine(lastLine);
-                        lastLine = nickContent[1];
-                        lastNick = nickContent[0];
+                        lastNick = nickContent[1];
                     }
                 }
             }
+            processLine(lastLine);
         }
     }
 
