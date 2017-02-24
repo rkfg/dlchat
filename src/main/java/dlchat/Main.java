@@ -35,6 +35,7 @@ import org.deeplearning4j.nn.conf.Updater;
 import org.deeplearning4j.nn.conf.graph.rnn.DuplicateToTimeSeriesVertex;
 import org.deeplearning4j.nn.conf.graph.rnn.LastTimeStepVertex;
 import org.deeplearning4j.nn.conf.inputs.InputType;
+import org.deeplearning4j.nn.conf.layers.EmbeddingLayer;
 import org.deeplearning4j.nn.conf.layers.GravesLSTM;
 import org.deeplearning4j.nn.conf.layers.RnnOutputLayer;
 import org.deeplearning4j.nn.graph.ComputationGraph;
@@ -57,8 +58,8 @@ public class Main {
     private static List<List<Integer>> logs = new ArrayList<>();
     private static Random rng = new Random();
     // RNN dimensions
-    public static final int HIDDEN_LAYER_WIDTH = 2048;
-    public static final int HIDDEN_LAYER_CONT = 1;
+    public static final int HIDDEN_LAYER_WIDTH = 256;
+    private static final int EMBEDDING_WIDTH = 100;
     private static final String FILENAME = "/home/rkfg/movie_lines_trunc.txt";
     private static final String BACKUP_FILENAME = "/home/rkfg/rnn_train.bak.zip";
     private static final int MINIBATCH_SIZE = 128;
@@ -66,13 +67,13 @@ public class Main {
     private static final Random rnd = new Random(new Date().getTime());
     private static final long SAVE_EACH_MS = TimeUnit.MINUTES.toMillis(20);
     private static final long TEST_EACH_MS = TimeUnit.MINUTES.toMillis(1);
-    private static final int MAX_DICT = 10000;
-    private static final int TBPTT_SIZE = 50;
+    private static final int MAX_DICT = 20000;
+    private static final int TBPTT_SIZE = 25;
     private static final double LEARNING_RATE = 1e-4;
     private static final double L2 = 1e-3;
     private static final double RMS_DECAY = 0.95;
-    private static final int ROW_SIZE = 100;
-    private static final boolean DEBUG = false;
+    private static final int ROW_SIZE = 20;
+    private static final boolean DEBUG = true;
 
     public static void main(String[] args) throws IOException {
         Nd4j.ENFORCE_NUMERICAL_STABILITY = true;
@@ -103,12 +104,14 @@ public class Main {
                 .weightInit(WeightInit.XAVIER).regularization(true).l2(L2)
                 .gradientNormalization(GradientNormalization.RenormalizeL2PerLayer);
 
-        GraphBuilder graphBuilder = builder.graphBuilder().pretrain(false).backprop(true).backpropType(BackpropType.TruncatedBPTT)
+        GraphBuilder graphBuilder = builder.graphBuilder().pretrain(false).backprop(true).backpropType(BackpropType.Standard)
                 .tBPTTBackwardLength(TBPTT_SIZE).tBPTTForwardLength(TBPTT_SIZE);
         graphBuilder.addInputs("firstLine", "decoderDummy")
                 .setInputTypes(InputType.recurrent(dict.size()), InputType.recurrent(dict.size()))
-                .addLayer("encoder", new GravesLSTM.Builder().nIn(dict.size()).nOut(HIDDEN_LAYER_WIDTH).activation(Activation.TANH).build(),
-                        "firstLine")
+                .addLayer("embedding", new EmbeddingLayer.Builder().nIn(dict.size()).nOut(EMBEDDING_WIDTH).build(), "firstLine")
+                .addLayer("encoder",
+                        new GravesLSTM.Builder().nIn(EMBEDDING_WIDTH).nOut(HIDDEN_LAYER_WIDTH).activation(Activation.TANH).build(),
+                        "embedding")
                 .addVertex("thoughtVector", new LastTimeStepVertex("firstLine"), "encoder")
                 .addVertex("dup", new DuplicateToTimeSeriesVertex("decoderDummy"), "thoughtVector")
                 .addLayer("decoder",
@@ -145,7 +148,7 @@ public class Main {
     private static void learn(ComputationGraph net, File networkFile) throws IOException {
         long lastSaveTime = System.currentTimeMillis();
         long lastTestTime = System.currentTimeMillis();
-        INDArray input = Nd4j.zeros(MINIBATCH_SIZE, dict.size(), ROW_SIZE);
+        INDArray input = Nd4j.zeros(MINIBATCH_SIZE, 1, ROW_SIZE);
         INDArray prediction = Nd4j.zeros(MINIBATCH_SIZE, dict.size(), ROW_SIZE);
         INDArray decode = Nd4j.zeros(MINIBATCH_SIZE, dict.size(), ROW_SIZE);
         INDArray inputMask = Nd4j.zeros(MINIBATCH_SIZE, ROW_SIZE);
@@ -183,7 +186,7 @@ public class Main {
                     for (int seq = 0; seq < ROW_SIZE; seq++) {
                         if (seq < rowIn.size()) {
                             int in = rowIn.get(seq);
-                            input.putScalar(new int[] { j, in, seq }, 1);
+                            input.putScalar(new int[] { j, 0, seq }, in);
                             inputMask.putScalar(new int[] { j, seq }, 1);
                         } else {
                             inputMask.putScalar(new int[] { j, seq }, 0);
@@ -201,8 +204,7 @@ public class Main {
                     if (DEBUG) {
                         System.out.println("Row in: " + rowIn);
                         INDArray inTensor = input.tensorAlongDimension(j, 1, 2);
-                        INDArray inputMax = Nd4j.argMax(inTensor, 0);
-                        System.out.println("inputMax tensor: " + inputMax);
+                        System.out.println("input tensor: " + inTensor);
                         System.out.println("inputMask tensor: " + inputMask.tensorAlongDimension(j, 1));
                         INDArray predTensor = prediction.tensorAlongDimension(j, 1, 2);
                         INDArray predMax = Nd4j.argMax(predTensor, 0);
@@ -210,8 +212,8 @@ public class Main {
                         System.out.println("predMask tensor: " + predictionMask.tensorAlongDimension(j, 1));
                         System.out.println("decodeMask tensor: " + decodeMask.tensorAlongDimension(j, 1));
                         System.out.print("IN: ");
-                        for (int sPos = 0; sPos < inputMax.size(1); sPos++) {
-                            System.out.print(revDict.get(inputMax.getInt(sPos)) + " ");
+                        for (int sPos = 0; sPos < inTensor.size(1); sPos++) {
+                            System.out.print(revDict.get(inTensor.getInt(sPos)) + " ");
                         }
                         System.out.println();
                         System.out.print("OUT: ");
@@ -255,8 +257,7 @@ public class Main {
                     List<Integer> rowPred = logs.get(prevI + 1);
                     for (int seq = 0; seq < ROW_SIZE; seq++) {
                         if (seq < rowIn.size()) {
-                            int in = rowIn.get(seq);
-                            input.putScalar(new int[] { j, in, seq }, 0);
+                            input.putScalar(new int[] { j, 0, seq }, 0);
                             inputMask.putScalar(new int[] { j, seq }, 0);
                         }
                         if (seq < rowPred.size()) {
@@ -359,10 +360,10 @@ public class Main {
 
     private static void output(ComputationGraph net, List<Integer> rowIn, boolean printUnknowns) {
         net.rnnClearPreviousState();
-        INDArray in = Nd4j.zeros(1, dict.size(), rowIn.size());
+        INDArray in = Nd4j.zeros(1, 1, rowIn.size());
         INDArray decodeDummy = Nd4j.zeros(1, dict.size(), MAX_OUTPUT);
         for (int i = 0; i < rowIn.size(); ++i) {
-            in.putScalar(0, rowIn.get(i), i, 1);
+            in.putScalar(0, 0, i, rowIn.get(i));
         }
         INDArray out = net.outputSingle(in, decodeDummy);
         // System.out.println("OUT SHAPE: " + out.shapeInfoToString());
