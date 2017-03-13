@@ -24,7 +24,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 
-import org.deeplearning4j.api.storage.StatsStorage;
 import org.deeplearning4j.nn.api.OptimizationAlgorithm;
 import org.deeplearning4j.nn.conf.BackpropType;
 import org.deeplearning4j.nn.conf.ComputationGraphConfiguration;
@@ -40,9 +39,6 @@ import org.deeplearning4j.nn.conf.layers.RnnOutputLayer;
 import org.deeplearning4j.nn.graph.ComputationGraph;
 import org.deeplearning4j.nn.weights.WeightInit;
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
-import org.deeplearning4j.ui.api.UIServer;
-import org.deeplearning4j.ui.stats.StatsListener;
-import org.deeplearning4j.ui.storage.InMemoryStatsStorage;
 import org.deeplearning4j.util.ModelSerializer;
 import org.nd4j.linalg.activations.Activation;
 import org.nd4j.linalg.api.ndarray.INDArray;
@@ -89,12 +85,6 @@ public class Main {
                 ++idx;
             }
         }
-        StatsStorage statsStorage = null;
-        if (args.length == 0) {
-            UIServer uiServer = UIServer.getInstance();
-            statsStorage = new InMemoryStatsStorage();
-            uiServer.attach(statsStorage);
-        }
         prepareData(idx);
 
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
@@ -137,7 +127,7 @@ public class Main {
         if (args.length == 1 && args[0].equals("dialog")) {
             startDialog(net);
         } else {
-            net.setListeners(new ScoreIterationListener(1), new StatsListener(statsStorage));
+            net.setListeners(new ScoreIterationListener(1));
             learn(net, networkFile);
         }
     }
