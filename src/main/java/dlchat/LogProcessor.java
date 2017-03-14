@@ -21,13 +21,15 @@ public class LogProcessor {
     private Map<String, Integer> dict = new HashMap<>();
     private boolean countFreq;
     private InputStream is;
+    private int rowSize;
 
-    public LogProcessor(String filename, boolean countFreq) throws FileNotFoundException {
-        this(new FileInputStream(filename), countFreq);
+    public LogProcessor(String filename, int rowSize, boolean countFreq) throws FileNotFoundException {
+        this(new FileInputStream(filename), rowSize, countFreq);
     }
 
-    public LogProcessor(InputStream is, boolean countFreq) {
+    public LogProcessor(InputStream is, int rowSize, boolean countFreq) {
         this.is = is;
+        this.rowSize = rowSize;
         this.countFreq = countFreq;
     }
 
@@ -124,7 +126,11 @@ public class LogProcessor {
     }
 
     protected boolean processWords(Collection<String> words, List<Integer> wordIdxs) {
+        int i = rowSize;
         for (String word : words) {
+            if (--i == 0) {
+                break;
+            }
             Integer wordIdx = dict.get(word);
             if (wordIdx != null) {
                 wordIdxs.add(wordIdx);

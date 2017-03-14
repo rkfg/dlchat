@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
@@ -24,7 +25,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 
-import org.deeplearning4j.api.storage.StatsStorage;
 import org.deeplearning4j.nn.api.OptimizationAlgorithm;
 import org.deeplearning4j.nn.conf.BackpropType;
 import org.deeplearning4j.nn.conf.ComputationGraphConfiguration;
@@ -41,9 +41,6 @@ import org.deeplearning4j.nn.conf.layers.RnnOutputLayer;
 import org.deeplearning4j.nn.graph.ComputationGraph;
 import org.deeplearning4j.nn.weights.WeightInit;
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
-import org.deeplearning4j.ui.api.UIServer;
-import org.deeplearning4j.ui.stats.StatsListener;
-import org.deeplearning4j.ui.storage.InMemoryStatsStorage;
 import org.deeplearning4j.util.ModelSerializer;
 import org.nd4j.linalg.activations.Activation;
 import org.nd4j.linalg.api.ndarray.INDArray;
@@ -58,25 +55,25 @@ public class Main {
     private static List<List<Integer>> logs = new ArrayList<>();
     private static Random rng = new Random();
     // RNN dimensions
-    public static final int HIDDEN_LAYER_WIDTH = 256;
+    public static final int HIDDEN_LAYER_WIDTH = 200;
     private static final int EMBEDDING_WIDTH = 100;
     private static final String FILENAME = "/home/rkfg/movie_lines_trunc.txt";
     private static final String BACKUP_FILENAME = "/home/rkfg/rnn_train.bak.zip";
-    private static final int MINIBATCH_SIZE = 128;
-    private static final int MAX_OUTPUT = 50;
+    private static final int MINIBATCH_SIZE = 256;
     private static final Random rnd = new Random(new Date().getTime());
-    private static final long SAVE_EACH_MS = TimeUnit.MINUTES.toMillis(20);
+    private static final long SAVE_EACH_MS = TimeUnit.MINUTES.toMillis(5);
     private static final long TEST_EACH_MS = TimeUnit.MINUTES.toMillis(1);
-    private static final int MAX_DICT = 20000;
+    private static final int MAX_DICT = 10000;
     private static final int TBPTT_SIZE = 25;
-    private static final double LEARNING_RATE = 1e-4;
+    private static final double LEARNING_RATE = 1e-1;
     private static final double L2 = 1e-3;
     private static final double RMS_DECAY = 0.95;
     private static final int ROW_SIZE = 20;
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
 
     public static void main(String[] args) throws IOException {
         Nd4j.ENFORCE_NUMERICAL_STABILITY = true;
+        Nd4j.getMemoryManager().setAutoGcWindow(2000);
         cleanupTmp();
         int idx = 2;
         dict.put("<unk>", 0);
@@ -90,19 +87,12 @@ public class Main {
                 ++idx;
             }
         }
-        StatsStorage statsStorage = null;
-        if (args.length == 0) {
-            UIServer uiServer = UIServer.getInstance();
-            statsStorage = new InMemoryStatsStorage();
-            uiServer.attach(statsStorage);
-        }
         prepareData(idx);
 
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
         builder.iterations(1).learningRate(LEARNING_RATE).rmsDecay(RMS_DECAY)
-                .optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT).seed(123).miniBatch(true).updater(Updater.RMSPROP)
-                .weightInit(WeightInit.XAVIER).regularization(true).l2(L2)
-                .gradientNormalization(GradientNormalization.RenormalizeL2PerLayer);
+                .optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT).miniBatch(true).updater(Updater.RMSPROP)
+                .weightInit(WeightInit.XAVIER).gradientNormalization(GradientNormalization.RenormalizeL2PerLayer);
 
         GraphBuilder graphBuilder = builder.graphBuilder().pretrain(false).backprop(true).backpropType(BackpropType.Standard)
                 .tBPTTBackwardLength(TBPTT_SIZE).tBPTTForwardLength(TBPTT_SIZE);
@@ -140,7 +130,7 @@ public class Main {
         if (args.length == 1 && args[0].equals("dialog")) {
             startDialog(net);
         } else {
-            net.setListeners(new ScoreIterationListener(1), new StatsListener(statsStorage));
+            net.setListeners(new ScoreIterationListener(1));
             learn(net, networkFile);
         }
     }
@@ -154,7 +144,7 @@ public class Main {
         INDArray inputMask = Nd4j.zeros(MINIBATCH_SIZE, ROW_SIZE);
         INDArray predictionMask = Nd4j.zeros(MINIBATCH_SIZE, ROW_SIZE);
         INDArray decodeMask = Nd4j.zeros(MINIBATCH_SIZE, ROW_SIZE);
-        for (int epoch = 0; epoch < 20; ++epoch) {
+        for (int epoch = 0; epoch < 10000; ++epoch) {
             System.out.println("Epoch " + epoch);
             // Collections.shuffle(logs);
             int i = 0;
@@ -164,24 +154,13 @@ public class Main {
             }
             int lastPerc = 0;
             while (i < logs.size() - 1) {
-                // int rowSize = 0;
-                // int batchSize = 0;
-                // for (int j = 0; j < MINIBATCH_SIZE + 1; j++) {
-                // if (i + j > logs.size() - 2) {
-                // break;
-                // }
-                // int curSize = logs.get(i + j).size();
-                // if (curSize > rowSize) {
-                // rowSize = curSize;
-                // }
-                // batchSize++;
-                // }
                 int prevI = i;
                 for (int j = 0; j < MINIBATCH_SIZE; j++) {
                     if (i > logs.size() - 2) {
                         break;
                     }
-                    List<Integer> rowIn = logs.get(i);
+                    List<Integer> rowIn = new ArrayList<>(logs.get(i));
+                    Collections.reverse(rowIn);
                     List<Integer> rowPred = logs.get(i + 1);
                     for (int seq = 0; seq < ROW_SIZE; seq++) {
                         if (seq < rowIn.size()) {
@@ -291,8 +270,9 @@ public class Main {
         System.out.println("Dialog started.");
         while (true) {
             System.out.print("In> ");
-            String line = "me|" + System.console().readLine() + "\n";
-            LogProcessor dialogProcessor = new LogProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)), false) {
+            String line = "1 +++$+++ u11 +++$+++ m0 +++$+++ WALTER +++$+++ " + System.console().readLine() + "\n";
+            LogProcessor dialogProcessor = new LogProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)), ROW_SIZE,
+                    false) {
                 @Override
                 protected void processLine(String lastLine) {
                     List<String> words = new ArrayList<>();
@@ -360,8 +340,9 @@ public class Main {
 
     private static void output(ComputationGraph net, List<Integer> rowIn, boolean printUnknowns) {
         net.rnnClearPreviousState();
+        Collections.reverse(rowIn);
         INDArray in = Nd4j.zeros(1, 1, rowIn.size());
-        INDArray decodeDummy = Nd4j.zeros(1, dict.size(), MAX_OUTPUT);
+        INDArray decodeDummy = Nd4j.zeros(1, dict.size(), ROW_SIZE);
         for (int i = 0; i < rowIn.size(); ++i) {
             in.putScalar(0, 0, i, rowIn.get(i));
         }
@@ -388,7 +369,7 @@ public class Main {
 
     public static void prepareData(int idx) throws IOException, FileNotFoundException {
         System.out.println("Building the dictionary...");
-        LogProcessor logProcessor = new LogProcessor(FILENAME, true);
+        LogProcessor logProcessor = new LogProcessor(FILENAME, ROW_SIZE, true);
         logProcessor.start();
         Map<String, Integer> freqs = logProcessor.getFreq();
         Set<String> dictSet = new TreeSet<>();
@@ -429,7 +410,7 @@ public class Main {
         }
         System.out.println("Total dictionary size is " + dict.size() + ". Processing the dataset...");
         // System.out.println(dict);
-        logProcessor = new LogProcessor(FILENAME, false) {
+        logProcessor = new LogProcessor(FILENAME, ROW_SIZE, false) {
             @Override
             protected void processLine(String lastLine) {
                 List<Integer> wordIdxs = new ArrayList<>();
