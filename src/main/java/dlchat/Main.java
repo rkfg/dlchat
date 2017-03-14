@@ -54,25 +54,24 @@ public class Main {
     private static List<List<Integer>> logs = new ArrayList<>();
     private static Random rng = new Random();
     // RNN dimensions
-    public static final int HIDDEN_LAYER_WIDTH = 2048;
-    public static final int HIDDEN_LAYER_CONT = 1;
-    private static final String FILENAME = "/home/rkfg/movie_lines_trunc.txt";
+    public static final int HIDDEN_LAYER_WIDTH = 200;
+    private static final String FILENAME = "/home/rkfg/movie_lines.txt";
     private static final String BACKUP_FILENAME = "/home/rkfg/rnn_train.bak.zip";
-    private static final int MINIBATCH_SIZE = 128;
-    private static final int MAX_OUTPUT = 50;
+    private static final int MINIBATCH_SIZE = 256;
     private static final Random rnd = new Random(new Date().getTime());
-    private static final long SAVE_EACH_MS = TimeUnit.MINUTES.toMillis(20);
+    private static final long SAVE_EACH_MS = TimeUnit.MINUTES.toMillis(5);
     private static final long TEST_EACH_MS = TimeUnit.MINUTES.toMillis(1);
     private static final int MAX_DICT = 10000;
     private static final int TBPTT_SIZE = 50;
-    private static final double LEARNING_RATE = 1e-4;
+    private static final double LEARNING_RATE = 1e-1;
     private static final double L2 = 1e-3;
     private static final double RMS_DECAY = 0.95;
-    private static final int ROW_SIZE = 100;
+    private static final int ROW_SIZE = 20;
     private static final boolean DEBUG = false;
 
     public static void main(String[] args) throws IOException {
         Nd4j.ENFORCE_NUMERICAL_STABILITY = true;
+        Nd4j.getMemoryManager().setAutoGcWindow(2000);
         cleanupTmp();
         int idx = 2;
         dict.put("<unk>", 0);
@@ -90,9 +89,8 @@ public class Main {
 
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
         builder.iterations(1).learningRate(LEARNING_RATE).rmsDecay(RMS_DECAY)
-                .optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT).seed(123).miniBatch(true).updater(Updater.RMSPROP)
-                .weightInit(WeightInit.XAVIER).regularization(true).l2(L2)
-                .gradientNormalization(GradientNormalization.RenormalizeL2PerLayer);
+                .optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT).miniBatch(true).updater(Updater.RMSPROP)
+                .weightInit(WeightInit.XAVIER).gradientNormalization(GradientNormalization.RenormalizeL2PerLayer);
 
         GraphBuilder graphBuilder = builder.graphBuilder().pretrain(false).backprop(true).backpropType(BackpropType.TruncatedBPTT)
                 .tBPTTBackwardLength(TBPTT_SIZE).tBPTTForwardLength(TBPTT_SIZE);
@@ -142,7 +140,7 @@ public class Main {
         INDArray inputMask = Nd4j.zeros(MINIBATCH_SIZE, ROW_SIZE);
         INDArray predictionMask = Nd4j.zeros(MINIBATCH_SIZE, ROW_SIZE);
         INDArray decodeMask = Nd4j.zeros(MINIBATCH_SIZE, ROW_SIZE);
-        for (int epoch = 0; epoch < 20; ++epoch) {
+        for (int epoch = 0; epoch < 10000; ++epoch) {
             System.out.println("Epoch " + epoch);
             // Collections.shuffle(logs);
             int i = 0;
