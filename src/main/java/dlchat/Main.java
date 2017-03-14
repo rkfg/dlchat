@@ -271,7 +271,8 @@ public class Main {
         while (true) {
             System.out.print("In> ");
             String line = "1 +++$+++ u11 +++$+++ m0 +++$+++ WALTER +++$+++ " + System.console().readLine() + "\n";
-            LogProcessor dialogProcessor = new LogProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)), false) {
+            LogProcessor dialogProcessor = new LogProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)), ROW_SIZE,
+                    false) {
                 @Override
                 protected void processLine(String lastLine) {
                     List<String> words = new ArrayList<>();
@@ -340,10 +341,9 @@ public class Main {
     private static void output(ComputationGraph net, List<Integer> rowIn, boolean printUnknowns) {
         net.rnnClearPreviousState();
         Collections.reverse(rowIn);
-        int size = Math.min(rowIn.size(), ROW_SIZE);
-        INDArray in = Nd4j.zeros(1, dict.size(), size);
+        INDArray in = Nd4j.zeros(1, dict.size(), rowIn.size());
         INDArray decodeDummy = Nd4j.zeros(1, dict.size(), ROW_SIZE);
-        for (int i = 0; i < size; ++i) {
+        for (int i = 0; i < rowIn.size(); ++i) {
             in.putScalar(0, rowIn.get(i), i, 1);
         }
         INDArray out = net.outputSingle(in, decodeDummy);
@@ -369,7 +369,7 @@ public class Main {
 
     public static void prepareData(int idx) throws IOException, FileNotFoundException {
         System.out.println("Building the dictionary...");
-        LogProcessor logProcessor = new LogProcessor(FILENAME, true);
+        LogProcessor logProcessor = new LogProcessor(FILENAME, ROW_SIZE, true);
         logProcessor.start();
         Map<String, Integer> freqs = logProcessor.getFreq();
         Set<String> dictSet = new TreeSet<>();
@@ -410,7 +410,7 @@ public class Main {
         }
         System.out.println("Total dictionary size is " + dict.size() + ". Processing the dataset...");
         // System.out.println(dict);
-        logProcessor = new LogProcessor(FILENAME, false) {
+        logProcessor = new LogProcessor(FILENAME, ROW_SIZE, false) {
             @Override
             protected void processLine(String lastLine) {
                 List<Integer> wordIdxs = new ArrayList<>();
