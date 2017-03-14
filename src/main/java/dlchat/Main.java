@@ -280,7 +280,7 @@ public class Main {
         System.out.println("Dialog started.");
         while (true) {
             System.out.print("In> ");
-            String line = "me|" + System.console().readLine() + "\n";
+            String line = "1 +++$+++ u11 +++$+++ m0 +++$+++ WALTER +++$+++ " + System.console().readLine() + "\n";
             LogProcessor dialogProcessor = new LogProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)), false) {
                 @Override
                 protected void processLine(String lastLine) {
