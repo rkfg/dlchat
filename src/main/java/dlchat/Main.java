@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
@@ -151,24 +152,13 @@ public class Main {
             }
             int lastPerc = 0;
             while (i < logs.size() - 1) {
-                // int rowSize = 0;
-                // int batchSize = 0;
-                // for (int j = 0; j < MINIBATCH_SIZE + 1; j++) {
-                // if (i + j > logs.size() - 2) {
-                // break;
-                // }
-                // int curSize = logs.get(i + j).size();
-                // if (curSize > rowSize) {
-                // rowSize = curSize;
-                // }
-                // batchSize++;
-                // }
                 int prevI = i;
                 for (int j = 0; j < MINIBATCH_SIZE; j++) {
                     if (i > logs.size() - 2) {
                         break;
                     }
-                    List<Integer> rowIn = logs.get(i);
+                    List<Integer> rowIn = new ArrayList<>(logs.get(i));
+                    Collections.reverse(rowIn);
                     List<Integer> rowPred = logs.get(i + 1);
                     for (int seq = 0; seq < ROW_SIZE; seq++) {
                         if (seq < rowIn.size()) {
@@ -349,9 +339,11 @@ public class Main {
 
     private static void output(ComputationGraph net, List<Integer> rowIn, boolean printUnknowns) {
         net.rnnClearPreviousState();
-        INDArray in = Nd4j.zeros(1, dict.size(), rowIn.size());
-        INDArray decodeDummy = Nd4j.zeros(1, dict.size(), MAX_OUTPUT);
-        for (int i = 0; i < rowIn.size(); ++i) {
+        Collections.reverse(rowIn);
+        int size = Math.min(rowIn.size(), ROW_SIZE);
+        INDArray in = Nd4j.zeros(1, dict.size(), size);
+        INDArray decodeDummy = Nd4j.zeros(1, dict.size(), ROW_SIZE);
+        for (int i = 0; i < size; ++i) {
             in.putScalar(0, rowIn.get(i), i, 1);
         }
         INDArray out = net.outputSingle(in, decodeDummy);
