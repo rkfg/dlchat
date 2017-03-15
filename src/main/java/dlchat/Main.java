@@ -159,6 +159,8 @@ public class Main {
                     if (i > logs.size() - 2) {
                         break;
                     }
+                    decode.putScalar(new int[] { j, 1, 0 }, 1);
+                    decodeMask.putScalar(new int[] { j, 0 }, 1);
                     List<Integer> rowIn = new ArrayList<>(logs.get(i));
                     Collections.reverse(rowIn);
                     List<Integer> rowPred = logs.get(i + 1);
@@ -170,14 +172,23 @@ public class Main {
                         } else {
                             inputMask.putScalar(new int[] { j, seq }, 0);
                         }
+
                         if (seq < rowPred.size()) {
                             int pred = rowPred.get(seq);
                             prediction.putScalar(new int[] { j, pred, seq }, 1);
                             predictionMask.putScalar(new int[] { j, seq }, 1);
-                            decodeMask.putScalar(new int[] { j, seq }, 1);
                         } else {
                             predictionMask.putScalar(new int[] { j, seq }, 0);
-                            decodeMask.putScalar(new int[] { j, seq }, 0);
+                        }
+
+                        if (seq < ROW_SIZE - 1) {
+                            if (seq < rowPred.size() - 1) {
+                                int dec = rowPred.get(seq);
+                                decode.putScalar(new int[] { j, dec, seq + 1 }, 1);
+                                decodeMask.putScalar(new int[] { j, seq + 1 }, 1);
+                            } else {
+                                decodeMask.putScalar(new int[] { j, seq + 1 }, 0);
+                            }
                         }
                     }
                     if (DEBUG) {
@@ -189,6 +200,9 @@ public class Main {
                         INDArray predMax = Nd4j.argMax(predTensor, 0);
                         System.out.println("predMax tensor: " + predMax);
                         System.out.println("predMask tensor: " + predictionMask.tensorAlongDimension(j, 1));
+                        INDArray decodeTensor = decode.tensorAlongDimension(j, 1, 2);
+                        INDArray decodeMax = Nd4j.argMax(decodeTensor, 0);
+                        System.out.println("decodeMax tensor: " + decodeMax);
                         System.out.println("decodeMask tensor: " + decodeMask.tensorAlongDimension(j, 1));
                         System.out.print("IN: ");
                         for (int sPos = 0; sPos < inTensor.size(1); sPos++) {
@@ -236,13 +250,15 @@ public class Main {
                     List<Integer> rowPred = logs.get(prevI + 1);
                     for (int seq = 0; seq < ROW_SIZE; seq++) {
                         if (seq < rowIn.size()) {
-                            input.putScalar(new int[] { j, 0, seq }, 0);
                             inputMask.putScalar(new int[] { j, seq }, 0);
                         }
                         if (seq < rowPred.size()) {
                             int pred = rowPred.get(seq);
                             prediction.putScalar(new int[] { j, pred, seq }, 0);
                             predictionMask.putScalar(new int[] { j, seq }, 0);
+                            if (pred != 1) {
+                                decode.putScalar(new int[] { j, pred, seq + 1 }, 0);
+                            }
                             decodeMask.putScalar(new int[] { j, seq }, 0);
                         }
                     }
@@ -279,8 +295,13 @@ public class Main {
                     doProcessLine(lastLine, words, true);
                     List<Integer> wordIdxs = new ArrayList<>();
                     if (processWords(words, wordIdxs)) {
+                        System.out.print("Got words: ");
+                        for (Integer idx : wordIdxs) {
+                            System.out.print(revDict.get(idx) + " ");
+                        }
+                        System.out.println();
                         System.out.print("Out> ");
-                        output(net, wordIdxs, true);
+                        output(net, wordIdxs, true, true);
                     }
                 }
             };
@@ -334,35 +355,42 @@ public class Main {
         }
         System.out.println();
         System.out.print("Out: ");
-        output(net, rowIn, true);
+        output(net, rowIn, true, false);
         System.out.println("======================== TEST END ========================");
     }
 
-    private static void output(ComputationGraph net, List<Integer> rowIn, boolean printUnknowns) {
+    private static void output(ComputationGraph net, List<Integer> rowIn, boolean printUnknowns, boolean stopOnEos) {
         net.rnnClearPreviousState();
         Collections.reverse(rowIn);
         INDArray in = Nd4j.zeros(1, 1, rowIn.size());
-        INDArray decodeDummy = Nd4j.zeros(1, dict.size(), ROW_SIZE);
+        INDArray decode = Nd4j.zeros(1, dict.size(), 1);
         for (int i = 0; i < rowIn.size(); ++i) {
             in.putScalar(0, 0, i, rowIn.get(i));
         }
-        INDArray out = net.outputSingle(in, decodeDummy);
-        // System.out.println("OUT SHAPE: " + out.shapeInfoToString());
-        for (int i = 0; i < out.size(2); ++i) {
+        int lastIdx = 1;
+        decode.putScalar(0, lastIdx, 0, 1);
+        for (int row = 0; row < ROW_SIZE; ++row) {
+            INDArray out = net.outputSingle(in, decode);
+            //System.out.println("OUT SHAPE: " + out.shapeInfoToString());
             double d = rng.nextDouble();
             double sum = 0.0;
+            int idx = -1;
             for (int s = 0; s < out.size(1); s++) {
-                sum += out.getDouble(0, s, i);
+                sum += out.getDouble(0, s, 0);
                 if (d <= sum) {
-                    if (printUnknowns || !printUnknowns && s != 0) {
+                    idx = s;
+                    if (printUnknowns || s != 0) {
                         System.out.print(revDict.get(s) + " ");
                     }
                     break;
                 }
             }
-            // if (idx == 1) {
-            // break;
-            // }
+            if (stopOnEos && idx == 1) {
+                break;
+            }
+            decode.putScalar(0, lastIdx, 0, 0);
+            decode.putScalar(0, idx, 0, 1);
+            lastIdx = idx;
         }
         System.out.println();
     }
