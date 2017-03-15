@@ -254,8 +254,10 @@ public class Main {
                     if (prevI > logs.size() - 2) {
                         break;
                     }
-                    List<Integer> rowIn = logs.get(prevI);
-                    List<Integer> rowPred = logs.get(prevI + 1);
+                    List<Integer> rowIn = new ArrayList<>(logs.get(prevI));
+                    Collections.reverse(rowIn);
+                    List<Integer> rowPred = new ArrayList<>(logs.get(prevI + 1));
+                    rowPred.add(1); // <eos>
                     for (int seq = 0; seq < ROW_SIZE; seq++) {
                         if (seq < rowIn.size()) {
                             inputMask.putScalar(new int[] { j, seq }, 0);
