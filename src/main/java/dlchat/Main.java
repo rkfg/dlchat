@@ -55,9 +55,9 @@ public class Main {
     private static List<List<Integer>> logs = new ArrayList<>();
     private static Random rng = new Random();
     // RNN dimensions
-    public static final int HIDDEN_LAYER_WIDTH = 200;
-    private static final int EMBEDDING_WIDTH = 100;
-    private static final String FILENAME = "/home/rkfg/movie_lines_trunc.txt";
+    public static final int HIDDEN_LAYER_WIDTH = 1024;
+    private static final int EMBEDDING_WIDTH = 64;
+    private static final String FILENAME = "/home/rkfg/movie_lines.txt";
     private static final String BACKUP_FILENAME = "/home/rkfg/rnn_train.bak.zip";
     private static final int MINIBATCH_SIZE = 256;
     private static final Random rnd = new Random(new Date().getTime());
@@ -144,12 +144,12 @@ public class Main {
         INDArray inputMask = Nd4j.zeros(MINIBATCH_SIZE, ROW_SIZE);
         INDArray predictionMask = Nd4j.zeros(MINIBATCH_SIZE, ROW_SIZE);
         INDArray decodeMask = Nd4j.zeros(MINIBATCH_SIZE, ROW_SIZE);
-        for (int epoch = 0; epoch < 10000; ++epoch) {
+        for (int epoch = 1; epoch < 10000; ++epoch) {
             System.out.println("Epoch " + epoch);
             // Collections.shuffle(logs);
             int i = 0;
             String shift = System.getProperty("dlchat.shift");
-            if (epoch == 0 && shift != null) {
+            if (epoch == 1 && shift != null) {
                 i = Integer.valueOf(shift);
             }
             int lastPerc = 0;
