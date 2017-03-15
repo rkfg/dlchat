@@ -98,18 +98,18 @@ public class Main {
 
         GraphBuilder graphBuilder = builder.graphBuilder().pretrain(false).backprop(true).backpropType(BackpropType.Standard)
                 .tBPTTBackwardLength(TBPTT_SIZE).tBPTTForwardLength(TBPTT_SIZE);
-        graphBuilder.addInputs("firstLine", "decoderDummy")
+        graphBuilder.addInputs("inputLine", "decoderInput")
                 .setInputTypes(InputType.recurrent(dict.size()), InputType.recurrent(dict.size()))
-                .addLayer("embedding", new EmbeddingLayer.Builder().nIn(dict.size()).nOut(EMBEDDING_WIDTH).build(), "firstLine")
+                .addLayer("embeddingEncoder", new EmbeddingLayer.Builder().nIn(dict.size()).nOut(EMBEDDING_WIDTH).build(), "inputLine")
                 .addLayer("encoder",
                         new GravesLSTM.Builder().nIn(EMBEDDING_WIDTH).nOut(HIDDEN_LAYER_WIDTH).activation(Activation.TANH).build(),
-                        "embedding")
-                .addVertex("thoughtVector", new LastTimeStepVertex("firstLine"), "encoder")
-                .addVertex("dup", new DuplicateToTimeSeriesVertex("decoderDummy"), "thoughtVector")
+                        "embeddingEncoder")
+                .addVertex("thoughtVector", new LastTimeStepVertex("inputLine"), "encoder")
+                .addVertex("dup", new DuplicateToTimeSeriesVertex("decoderInput"), "thoughtVector")
                 .addLayer("decoder",
                         new GravesLSTM.Builder().nIn(dict.size() + HIDDEN_LAYER_WIDTH).nOut(HIDDEN_LAYER_WIDTH).activation(Activation.TANH)
                                 .build(),
-                        "decoderDummy", "dup")
+                        "decoderInput", "dup")
                 .addLayer("output", new RnnOutputLayer.Builder().nIn(HIDDEN_LAYER_WIDTH).nOut(dict.size()).activation(Activation.SOFTMAX)
                         .lossFunction(LossFunctions.LossFunction.MCXENT).build(), "decoder")
                 .setOutputs("output");
@@ -371,12 +371,11 @@ public class Main {
         net.rnnClearPreviousState();
         Collections.reverse(rowIn);
         INDArray in = Nd4j.zeros(1, 1, rowIn.size());
-        INDArray decode = Nd4j.zeros(1, dict.size(), 1);
+        INDArray decode = Nd4j.zeros(1, dict.size(), ROW_SIZE + 1);
         for (int i = 0; i < rowIn.size(); ++i) {
-            in.putScalar(0, 0, i, rowIn.get(i));
+            in.putScalar(new int[] { 0, 0, i }, rowIn.get(i));
         }
-        int lastIdx = 1;
-        decode.putScalar(0, lastIdx, 0, 1);
+        decode.putScalar(new int[] { 0, 2, 0 }, 1);
         for (int row = 0; row < ROW_SIZE; ++row) {
             INDArray out = net.outputSingle(in, decode);
             //System.out.println("OUT SHAPE: " + out.shapeInfoToString());
@@ -384,7 +383,7 @@ public class Main {
             double sum = 0.0;
             int idx = -1;
             for (int s = 0; s < out.size(1); s++) {
-                sum += out.getDouble(0, s, 0);
+                sum += out.getDouble(0, s, row);
                 if (d <= sum) {
                     idx = s;
                     if (printUnknowns || s != 0) {
@@ -396,9 +395,7 @@ public class Main {
             if (stopOnEos && idx == 1) {
                 break;
             }
-            decode.putScalar(0, lastIdx, 0, 0);
-            decode.putScalar(0, idx, 0, 1);
-            lastIdx = idx;
+            decode.putScalar(new int[] { 0, idx, row + 1 }, 1);
         }
         System.out.println();
     }
