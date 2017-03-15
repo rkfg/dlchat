@@ -75,11 +75,13 @@ public class Main {
         Nd4j.ENFORCE_NUMERICAL_STABILITY = true;
         Nd4j.getMemoryManager().setAutoGcWindow(2000);
         cleanupTmp();
-        int idx = 2;
+        int idx = 3;
         dict.put("<unk>", 0);
         revDict.put(0, "<unk>");
         dict.put("<eos>", 1);
         revDict.put(1, "<eos>");
+        dict.put("<go>", 2);
+        revDict.put(2, "<go>");
         for (char c : CHARS.toCharArray()) {
             if (!dict.containsKey(c)) {
                 dict.put(String.valueOf(c), idx);
@@ -159,11 +161,12 @@ public class Main {
                     if (i > logs.size() - 2) {
                         break;
                     }
-                    decode.putScalar(new int[] { j, 1, 0 }, 1);
+                    decode.putScalar(new int[] { j, 2, 0 }, 1);
                     decodeMask.putScalar(new int[] { j, 0 }, 1);
                     List<Integer> rowIn = new ArrayList<>(logs.get(i));
                     Collections.reverse(rowIn);
-                    List<Integer> rowPred = logs.get(i + 1);
+                    List<Integer> rowPred = new ArrayList<>(logs.get(i + 1));
+                    rowPred.add(1); // <eos>
                     for (int seq = 0; seq < ROW_SIZE; seq++) {
                         if (seq < rowIn.size()) {
                             int in = rowIn.get(seq);
@@ -196,17 +199,22 @@ public class Main {
                         INDArray inTensor = input.tensorAlongDimension(j, 1, 2);
                         System.out.println("input tensor: " + inTensor);
                         System.out.println("inputMask tensor: " + inputMask.tensorAlongDimension(j, 1));
-                        INDArray predTensor = prediction.tensorAlongDimension(j, 1, 2);
-                        INDArray predMax = Nd4j.argMax(predTensor, 0);
-                        System.out.println("predMax tensor: " + predMax);
-                        System.out.println("predMask tensor: " + predictionMask.tensorAlongDimension(j, 1));
                         INDArray decodeTensor = decode.tensorAlongDimension(j, 1, 2);
                         INDArray decodeMax = Nd4j.argMax(decodeTensor, 0);
                         System.out.println("decodeMax tensor: " + decodeMax);
                         System.out.println("decodeMask tensor: " + decodeMask.tensorAlongDimension(j, 1));
+                        INDArray predTensor = prediction.tensorAlongDimension(j, 1, 2);
+                        INDArray predMax = Nd4j.argMax(predTensor, 0);
+                        System.out.println("predMax tensor: " + predMax);
+                        System.out.println("predMask tensor: " + predictionMask.tensorAlongDimension(j, 1));
                         System.out.print("IN: ");
                         for (int sPos = 0; sPos < inTensor.size(1); sPos++) {
                             System.out.print(revDict.get(inTensor.getInt(sPos)) + " ");
+                        }
+                        System.out.println();
+                        System.out.print("DECODE: ");
+                        for (int sPos = 0; sPos < decodeMax.size(1); sPos++) {
+                            System.out.print(revDict.get(decodeMax.getInt(sPos)) + " ");
                         }
                         System.out.println();
                         System.out.print("OUT: ");

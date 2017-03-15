@@ -139,7 +139,6 @@ public class LogProcessor {
             }
         }
         if (!wordIdxs.isEmpty()) {
-            wordIdxs.add(1); // end of line
             return true;
         }
         return false;
