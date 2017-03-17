@@ -17,8 +17,8 @@ import java.util.Set;
 public class LogProcessor {
     public static final String SPECIALS = "!\"#$;%^:?*()[]{}<>«»,.–—=+…";
     private Set<String> dictSet = new HashSet<>();
-    private Map<String, Integer> freq = new HashMap<>();
-    private Map<String, Integer> dict = new HashMap<>();
+    private Map<String, Double> freq = new HashMap<>();
+    private Map<String, Double> dict = new HashMap<>();
     private boolean countFreq;
     private InputStream is;
     private int rowSize;
@@ -104,9 +104,9 @@ public class LogProcessor {
             coll.add(word);
         }
         if (countFreq) {
-            Integer count = freq.get(word);
+            Double count = freq.get(word);
             if (count == null) {
-                freq.put(word, 1);
+                freq.put(word, 1.0);
             } else {
                 freq.put(word, count + 1);
             }
@@ -117,25 +117,25 @@ public class LogProcessor {
         return dictSet;
     }
 
-    public Map<String, Integer> getFreq() {
+    public Map<String, Double> getFreq() {
         return freq;
     }
 
-    public void setDict(Map<String, Integer> dict) {
+    public void setDict(Map<String, Double> dict) {
         this.dict = dict;
     }
 
-    protected boolean processWords(Collection<String> words, List<Integer> wordIdxs) {
+    protected boolean processWords(Collection<String> words, List<Double> wordIdxs) {
         int i = rowSize;
         for (String word : words) {
             if (--i == 0) {
                 break;
             }
-            Integer wordIdx = dict.get(word);
+            Double wordIdx = dict.get(word);
             if (wordIdx != null) {
                 wordIdxs.add(wordIdx);
             } else {
-                wordIdxs.add(0);
+                wordIdxs.add(0.0);
             }
         }
         if (!wordIdxs.isEmpty()) {
