@@ -60,8 +60,9 @@ public class Main {
     // RNN dimensions
     public static final int HIDDEN_LAYER_WIDTH = 1024;
     private static final int EMBEDDING_WIDTH = 256;
-    private static final String FILENAME = "/home/rkfg/movie_lines.txt";
-    private static final String BACKUP_FILENAME = "/home/rkfg/rnn_train.bak.zip";
+    private static final String CORPUS_FILENAME = "movie_lines.txt";
+    private static final String NETWORK_FILE_PATH = "rnn_train.zip";
+    private static final String BACKUP_FILENAME = "rnn_train.bak.zip";
     private static final int MINIBATCH_SIZE = 64;
     private static final Random rnd = new Random(new Date().getTime());
     private static final long SAVE_EACH_MS = TimeUnit.MINUTES.toMillis(10);
@@ -75,14 +76,18 @@ public class Main {
     private static final int GC_WINDOW = 1000;
 
     public static void main(String[] args) throws IOException {
+        new Main().run(args);
+    }
+
+    private void run(String[] args) throws IOException {
         Nd4j.ENFORCE_NUMERICAL_STABILITY = true;
         Nd4j.getMemoryManager().setAutoGcWindow(GC_WINDOW);
         Configuration configuration = CudaEnvironment.getInstance().getConfiguration();
         configuration.setMaximumBlockSize(768);
         configuration.setMinimumBlockSize(512);
 
-        configuration.enableDebug(true);
-        configuration.setVerbose(true);
+        //configuration.enableDebug(true);
+        //configuration.setVerbose(true);
 
         cleanupTmp();
         double idx = 3.0;
@@ -126,7 +131,7 @@ public class Main {
 
         ComputationGraphConfiguration conf = graphBuilder.build();
         ComputationGraph net;
-        File networkFile = new File("/home/rkfg/rnn_train.zip");
+        File networkFile = new File(NETWORK_FILE_PATH);
         if (networkFile.exists()) {
             System.out.println("Loading the existing network...");
             net = ModelSerializer.restoreComputationGraph(networkFile);
@@ -147,7 +152,7 @@ public class Main {
         }
     }
 
-    private static void learn(ComputationGraph net, File networkFile) throws IOException {
+    private void learn(ComputationGraph net, File networkFile) throws IOException {
         long lastSaveTime = System.currentTimeMillis();
         long lastTestTime = System.currentTimeMillis();
         LogsIterator logsIterator = new LogsIterator(logs, MINIBATCH_SIZE, dict.size(), ROW_SIZE, revDict);
@@ -186,7 +191,7 @@ public class Main {
         }
     }
 
-    private static void startDialog(ComputationGraph net) throws IOException {
+    private void startDialog(ComputationGraph net) throws IOException {
         System.out.println("Dialog started.");
         while (true) {
             System.out.print("In> ");
@@ -214,7 +219,7 @@ public class Main {
         }
     }
 
-    private static void saveModel(ComputationGraph net, File networkFile) throws IOException {
+    private void saveModel(ComputationGraph net, File networkFile) throws IOException {
         System.out.println("Saving the model...");
         File backup = new File(BACKUP_FILENAME);
         if (networkFile.exists()) {
@@ -228,7 +233,7 @@ public class Main {
         System.out.println("Done.");
     }
 
-    public static void cleanupTmp() throws IOException {
+    private void cleanupTmp() throws IOException {
         Files.find(Paths.get("/tmp"), 1, new BiPredicate<Path, BasicFileAttributes>() {
 
             @Override
@@ -249,7 +254,7 @@ public class Main {
         });
     }
 
-    public static void test(ComputationGraph net) {
+    private void test(ComputationGraph net) {
         System.out.println("======================== TEST ========================");
         int selected = rnd.nextInt(logs.size());
         List<Double> rowIn = new ArrayList<>(logs.get(selected));
@@ -263,7 +268,7 @@ public class Main {
         System.out.println("======================== TEST END ========================");
     }
 
-    private static void output(ComputationGraph net, List<Double> rowIn, boolean printUnknowns, boolean stopOnEos) {
+    private void output(ComputationGraph net, List<Double> rowIn, boolean printUnknowns, boolean stopOnEos) {
         net.rnnClearPreviousState();
         Collections.reverse(rowIn);
         INDArray in = Nd4j.create(ArrayUtils.toPrimitive(rowIn.toArray(new Double[0])), new int[] { 1, 1, rowIn.size() });
@@ -297,9 +302,9 @@ public class Main {
         System.out.println();
     }
 
-    public static void prepareData(double idx) throws IOException, FileNotFoundException {
+    private void prepareData(double idx) throws IOException, FileNotFoundException {
         System.out.println("Building the dictionary...");
-        LogProcessor logProcessor = new LogProcessor(FILENAME, ROW_SIZE, true);
+        LogProcessor logProcessor = new LogProcessor(CORPUS_FILENAME, ROW_SIZE, true);
         logProcessor.start();
         Map<String, Double> freqs = logProcessor.getFreq();
         Set<String> dictSet = new TreeSet<>();
@@ -340,7 +345,7 @@ public class Main {
         }
         System.out.println("Total dictionary size is " + dict.size() + ". Processing the dataset...");
         // System.out.println(dict);
-        logProcessor = new LogProcessor(FILENAME, ROW_SIZE, false) {
+        logProcessor = new LogProcessor(CORPUS_FILENAME, ROW_SIZE, false) {
             @Override
             protected void processLine(String lastLine) {
                 List<Double> wordIdxs = new ArrayList<>();
