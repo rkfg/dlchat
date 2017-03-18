@@ -25,7 +25,7 @@ public class CorpusIterator implements MultiDataSetIterator {
      * it advances (manually) to the next macrobatch.
      */
 
-    private List<List<Double>> logs;
+    private List<List<Double>> corpus;
     private int batchSize;
     private int batchesPerMacrobatch;
     private int totalBatches;
@@ -35,14 +35,14 @@ public class CorpusIterator implements MultiDataSetIterator {
     private int dictSize;
     private int rowSize;
 
-    public CorpusIterator(List<List<Double>> logs, int batchSize, int batchesPerMacrobatch, int dictSize, int rowSize) {
-        this.logs = logs;
+    public CorpusIterator(List<List<Double>> corpus, int batchSize, int batchesPerMacrobatch, int dictSize, int rowSize) {
+        this.corpus = corpus;
         this.batchSize = batchSize;
         this.batchesPerMacrobatch = batchesPerMacrobatch;
         this.dictSize = dictSize;
         this.rowSize = rowSize;
-        totalBatches = logs.size() / batchSize + 1;
-        totalMacroBatches = totalBatches / batchesPerMacrobatch + 1;
+        totalBatches = (int) Math.ceil((double) corpus.size() / batchSize);
+        totalMacroBatches = (int) Math.ceil((double) totalBatches / batchesPerMacrobatch);
     }
 
     @Override
@@ -61,19 +61,18 @@ public class CorpusIterator implements MultiDataSetIterator {
 
     @Override
     public MultiDataSet next(int num) {
-        INDArray input = Nd4j.zeros(batchSize, 1, rowSize);
-        INDArray prediction = Nd4j.zeros(batchSize, dictSize, rowSize);
-        INDArray decode = Nd4j.zeros(batchSize, dictSize, rowSize);
-        INDArray inputMask = Nd4j.zeros(batchSize, rowSize);
-        INDArray predictionMask = Nd4j.zeros(batchSize, rowSize); // this mask is also used for the decoder input, the length is the same
         int i = currentBatch * batchSize;
-        for (int j = 0; j < batchSize; j++) {
-            if (i > logs.size() - 2) {
-                break;
-            }
-            List<Double> rowIn = new ArrayList<>(logs.get(i));
+        int currentBatchSize = Math.min(batchSize, corpus.size() - i - 1);
+        INDArray input = Nd4j.zeros(currentBatchSize, 1, rowSize);
+        INDArray prediction = Nd4j.zeros(currentBatchSize, dictSize, rowSize);
+        INDArray decode = Nd4j.zeros(currentBatchSize, dictSize, rowSize);
+        INDArray inputMask = Nd4j.zeros(currentBatchSize, rowSize);
+        // this mask is also used for the decoder input, the length is the same
+        INDArray predictionMask = Nd4j.zeros(currentBatchSize, rowSize);
+        for (int j = 0; j < currentBatchSize; j++) {
+            List<Double> rowIn = new ArrayList<>(corpus.get(i));
             Collections.reverse(rowIn);
-            List<Double> rowPred = new ArrayList<>(logs.get(i + 1));
+            List<Double> rowPred = new ArrayList<>(corpus.get(i + 1));
             rowPred.add(1.0); // add <eos> token
             // replace the entire row in "input" using NDArrayIndex, it's faster than putScalar(); input is NOT made of one-hot vectors
             // because of the embedding layer that accepts token indexes directly
