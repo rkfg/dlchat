@@ -176,6 +176,7 @@ public class LogsIterator implements MultiDataSetIterator {
 
     public void setCurrentBatch(int currentBatch) {
         this.currentBatch = currentBatch;
+        currentMacroBatch = getMacroBatchByCurrentBatch();
     }
 
     public boolean hasNextMacrobatch() {

@@ -166,9 +166,10 @@ public class Main {
             String shift = System.getProperty("dlchat.shift");
             if (epoch == 1 && shift != null) {
                 logsIterator.setCurrentBatch(Integer.valueOf(shift));
+            } else {
+                logsIterator.reset();
             }
             int lastPerc = 0;
-            logsIterator.reset();
             while (logsIterator.hasNextMacrobatch()) {
                 long t1 = System.nanoTime();
                 net.fit(logsIterator);
