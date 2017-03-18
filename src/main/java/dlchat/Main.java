@@ -26,6 +26,7 @@ import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 
 import org.apache.commons.lang3.ArrayUtils;
+import org.deeplearning4j.nn.api.Layer;
 import org.deeplearning4j.nn.api.OptimizationAlgorithm;
 import org.deeplearning4j.nn.conf.BackpropType;
 import org.deeplearning4j.nn.conf.ComputationGraphConfiguration;
@@ -40,6 +41,7 @@ import org.deeplearning4j.nn.conf.layers.EmbeddingLayer;
 import org.deeplearning4j.nn.conf.layers.GravesLSTM;
 import org.deeplearning4j.nn.conf.layers.RnnOutputLayer;
 import org.deeplearning4j.nn.graph.ComputationGraph;
+import org.deeplearning4j.nn.graph.vertex.GraphVertex;
 import org.deeplearning4j.nn.weights.WeightInit;
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
 import org.deeplearning4j.util.ModelSerializer;
@@ -58,22 +60,22 @@ public class Main {
     private static List<List<Double>> logs = new ArrayList<>();
     private static Random rng = new Random();
     // RNN dimensions
-    public static final int HIDDEN_LAYER_WIDTH = 1024;
+    public static final int HIDDEN_LAYER_WIDTH = 512;
     private static final int EMBEDDING_WIDTH = 256;
     private static final String CORPUS_FILENAME = "movie_lines.txt";
     private static final String NETWORK_FILE_PATH = "rnn_train.zip";
     private static final String BACKUP_FILENAME = "rnn_train.bak.zip";
     private static final int MINIBATCH_SIZE = 64;
     private static final Random rnd = new Random(new Date().getTime());
-    private static final long SAVE_EACH_MS = TimeUnit.MINUTES.toMillis(10);
+    private static final long SAVE_EACH_MS = TimeUnit.MINUTES.toMillis(5);
     private static final long TEST_EACH_MS = TimeUnit.MINUTES.toMillis(1);
-    private static final int MAX_DICT = 20000;
+    private static final int MAX_DICT = 10000;
     private static final int TBPTT_SIZE = 25;
-    private static final double LEARNING_RATE = 1e-2;
+    private static final double LEARNING_RATE = 1e-1;
     private static final double L2 = 1e-3;
     private static final double RMS_DECAY = 0.95;
     private static final int ROW_SIZE = 40;
-    private static final int GC_WINDOW = 1000;
+    private static final int GC_WINDOW = 5000;
     private static final int MACROBATCH_SIZE = 10;
 
     public static void main(String[] args) throws IOException {
@@ -87,8 +89,8 @@ public class Main {
         configuration.setMaximumBlockSize(768);
         configuration.setMinimumBlockSize(512);
 
-        //configuration.enableDebug(true);
-        //configuration.setVerbose(true);
+        // configuration.enableDebug(true);
+        // configuration.setVerbose(true);
 
         cleanupTmp();
         double idx = 3.0;
@@ -137,7 +139,7 @@ public class Main {
             System.out.println("Loading the existing network...");
             net = ModelSerializer.restoreComputationGraph(networkFile);
             if (args.length == 0) {
-                // test(net);
+                test(net);
             }
         } else {
             System.out.println("Creating a new network...");
@@ -278,14 +280,30 @@ public class Main {
         double[] decodeArr = new double[dict.size()];
         decodeArr[2] = 1;
         INDArray decode = Nd4j.create(decodeArr, new int[] { 1, dict.size(), 1 });
+        Map<String, INDArray> feedForward = net.feedForward(new INDArray[] { in, decode }, false);
+        INDArray thoughtVector = feedForward.get("encoder").reshape(1, HIDDEN_LAYER_WIDTH, 1);
+        System.out.println("Thought=" + thoughtVector);
+        Layer decoder = net.getLayer("decoder");
+        Layer output = net.getLayer("output");
+        System.out.println("Output=" + output);
+        GraphVertex mergeVertex = net.getVertex("decoder-merge");
         for (int row = 0; row < ROW_SIZE; ++row) {
-            INDArray out = net.outputSingle(in, decode);
+            // System.out.println("THOUGHT SHAPE: " + thoughtVector.shapeInfoToString() + " DECODE SHAPE: " + decode.shapeInfoToString());
+            mergeVertex.setInputs(decode, thoughtVector);
+            INDArray merged = mergeVertex.doForward(false);
+            INDArray activateDec = decoder.activate(merged, false);
+            //System.out.println("ActivateDec shape=" + activateDec.shapeInfoToString());
+            //System.out.println("ActivateDec=" + activateDec);
+            INDArray out = output.activate(activateDec, false);
+            //System.out.println("OutputDec shape=" + out.shapeInfoToString());
+            //System.out.println("OutputDec=" + out);
+            // INDArray out = net.outputSingle(in, decode);
             // System.out.println("OUT SHAPE: " + out.shapeInfoToString());
             double d = rng.nextDouble();
             double sum = 0.0;
             int idx = -1;
             for (int s = 0; s < out.size(1); s++) {
-                sum += out.getDouble(0, s, row);
+                sum += out.getDouble(0, s, 0);
                 if (d <= sum) {
                     idx = s;
                     if (printUnknowns || s != 0) {
@@ -299,8 +317,8 @@ public class Main {
             }
             double[] newDecodeArr = new double[dict.size()];
             newDecodeArr[idx] = 1;
-            INDArray newDecode = Nd4j.create(newDecodeArr, new int[] { 1, dict.size(), 1 });
-            decode = Nd4j.concat(2, decode, newDecode);
+            decode = Nd4j.create(newDecodeArr, new int[] { 1, dict.size(), 1 });
+            // decode = Nd4j.concat(2, decode, newDecode);
         }
         System.out.println();
     }
