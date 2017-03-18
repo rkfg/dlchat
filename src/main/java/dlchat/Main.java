@@ -5,10 +5,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -23,8 +19,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
-import java.util.function.BiPredicate;
-import java.util.function.Consumer;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.deeplearning4j.nn.api.Layer;
@@ -55,11 +49,11 @@ import org.nd4j.linalg.lossfunctions.LossFunctions;
 
 public class Main {
 
-    public static final Map<String, Double> dict = new HashMap<>();
-    public static final Map<Double, String> revDict = new HashMap<>();
-    private static final String CHARS = "-\\/_&" + LogProcessor.SPECIALS;
-    private static List<List<Double>> logs = new ArrayList<>();
-    private static Random rng = new Random();
+    public final Map<String, Double> dict = new HashMap<>();
+    public final Map<Double, String> revDict = new HashMap<>();
+    private final String CHARS = "-\\/_&" + LogProcessor.SPECIALS;
+    private List<List<Double>> logs = new ArrayList<>();
+    private Random rng = new Random();
     // RNN dimensions
     public static final int HIDDEN_LAYER_WIDTH = 512;
     private static final int EMBEDDING_WIDTH = 256;
@@ -78,6 +72,7 @@ public class Main {
     private static final int ROW_SIZE = 40;
     private static final int GC_WINDOW = 5000;
     private static final int MACROBATCH_SIZE = 10;
+    private ComputationGraph net;
 
     public static void main(String[] args) throws IOException {
         new Main().run(args);
@@ -86,14 +81,7 @@ public class Main {
     private void run(String[] args) throws IOException {
         Nd4j.ENFORCE_NUMERICAL_STABILITY = true;
         Nd4j.getMemoryManager().setAutoGcWindow(GC_WINDOW);
-        Configuration configuration = CudaEnvironment.getInstance().getConfiguration();
-        configuration.setMaximumBlockSize(768);
-        configuration.setMinimumBlockSize(512);
 
-        // configuration.enableDebug(true);
-        // configuration.setVerbose(true);
-
-        cleanupTmp();
         double idx = 3.0;
         dict.put("<unk>", 0.0);
         revDict.put(0.0, "<unk>");
@@ -134,13 +122,12 @@ public class Main {
                 .setOutputs("output");
 
         ComputationGraphConfiguration conf = graphBuilder.build();
-        ComputationGraph net;
         File networkFile = new File(NETWORK_FILE_PATH);
         if (networkFile.exists()) {
             System.out.println("Loading the existing network...");
             net = ModelSerializer.restoreComputationGraph(networkFile);
             if (args.length == 0) {
-                test(net);
+                test();
             }
         } else {
             System.out.println("Creating a new network...");
@@ -149,14 +136,14 @@ public class Main {
         }
 
         if (args.length == 1 && args[0].equals("dialog")) {
-            startDialog(net);
+            startDialog();
         } else {
             net.setListeners(new ScoreIterationListener(1));
-            learn(net, networkFile);
+            learn(networkFile);
         }
     }
 
-    private void learn(ComputationGraph net, File networkFile) throws IOException {
+    private void learn(File networkFile) throws IOException {
         long lastSaveTime = System.currentTimeMillis();
         long lastTestTime = System.currentTimeMillis();
         LogsIterator logsIterator = new LogsIterator(logs, MINIBATCH_SIZE, MACROBATCH_SIZE, dict.size(), ROW_SIZE, revDict);
@@ -183,18 +170,18 @@ public class Main {
                     lastPerc = newPerc;
                 }
                 if (System.currentTimeMillis() - lastSaveTime > SAVE_EACH_MS) {
-                    saveModel(net, networkFile);
+                    saveModel(networkFile);
                     lastSaveTime = System.currentTimeMillis();
                 }
                 if (System.currentTimeMillis() - lastTestTime > TEST_EACH_MS) {
-                    test(net);
+                    test();
                     lastTestTime = System.currentTimeMillis();
                 }
             }
         }
     }
 
-    private void startDialog(ComputationGraph net) throws IOException {
+    private void startDialog() throws IOException {
         System.out.println("Dialog started.");
         try (Scanner scanner = new Scanner(System.in)) {
             while (true) {
@@ -214,7 +201,7 @@ public class Main {
                             }
                             System.out.println();
                             System.out.print("Out> ");
-                            output(net, wordIdxs, true, true);
+                            output(wordIdxs, true, true);
                         }
                     }
                 };
@@ -224,7 +211,7 @@ public class Main {
         }
     }
 
-    private void saveModel(ComputationGraph net, File networkFile) throws IOException {
+    private void saveModel(File networkFile) throws IOException {
         System.out.println("Saving the model...");
         File backup = new File(BACKUP_FILENAME);
         if (networkFile.exists()) {
@@ -234,32 +221,10 @@ public class Main {
             networkFile.renameTo(backup);
         }
         ModelSerializer.writeModel(net, networkFile, true);
-        cleanupTmp();
         System.out.println("Done.");
     }
 
-    private void cleanupTmp() throws IOException {
-        Files.find(Paths.get("/tmp"), 1, new BiPredicate<Path, BasicFileAttributes>() {
-
-            @Override
-            public boolean test(Path t, BasicFileAttributes u) {
-                return t.getFileName().toString().startsWith("model");
-            }
-        }).forEach(new Consumer<Path>() {
-
-            @Override
-            public void accept(Path t) {
-                try {
-                    Files.delete(t);
-                } catch (IOException e) {
-                    System.out.println("Can't delete " + t);
-                    e.printStackTrace();
-                }
-            }
-        });
-    }
-
-    private void test(ComputationGraph net) {
+    private void test() {
         System.out.println("======================== TEST ========================");
         int selected = rnd.nextInt(logs.size());
         List<Double> rowIn = new ArrayList<>(logs.get(selected));
@@ -269,11 +234,11 @@ public class Main {
         }
         System.out.println();
         System.out.print("Out: ");
-        output(net, rowIn, true, true);
-        System.out.println("======================== TEST END ========================");
+        output(rowIn, true, true);
+        System.out.println("====================== TEST END ======================");
     }
 
-    private void output(ComputationGraph net, List<Double> rowIn, boolean printUnknowns, boolean stopOnEos) {
+    private void output(List<Double> rowIn, boolean printUnknowns, boolean stopOnEos) {
         net.rnnClearPreviousState();
         Collections.reverse(rowIn);
         INDArray in = Nd4j.create(ArrayUtils.toPrimitive(rowIn.toArray(new Double[0])), new int[] { 1, 1, rowIn.size() });
