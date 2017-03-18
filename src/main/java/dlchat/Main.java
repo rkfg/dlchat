@@ -74,6 +74,7 @@ public class Main {
     private static final double RMS_DECAY = 0.95;
     private static final int ROW_SIZE = 40;
     private static final int GC_WINDOW = 1000;
+    private static final int MACROBATCH_SIZE = 10;
 
     public static void main(String[] args) throws IOException {
         new Main().run(args);
