@@ -76,7 +76,7 @@ public class CorpusIterator implements MultiDataSetIterator {
             List<Double> rowPred = new ArrayList<>(logs.get(i + 1));
             rowPred.add(1.0); // <eos>
             input.put(new INDArrayIndex[] { NDArrayIndex.point(j), NDArrayIndex.point(0), NDArrayIndex.interval(0, rowIn.size()) },
-                    Nd4j.create(ArrayUtils.toPrimitive((Double[]) rowIn.toArray(new Double[0]))));
+                    Nd4j.create(ArrayUtils.toPrimitive(rowIn.toArray(new Double[0]))));
             inputMask.put(new INDArrayIndex[] { NDArrayIndex.point(j), NDArrayIndex.interval(0, rowIn.size()) }, Nd4j.ones(rowIn.size()));
             predictionMask.put(new INDArrayIndex[] { NDArrayIndex.point(j), NDArrayIndex.interval(0, rowPred.size()) },
                     Nd4j.ones(rowPred.size()));
