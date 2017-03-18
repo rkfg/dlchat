@@ -120,8 +120,8 @@ public class LogsIterator implements MultiDataSetIterator {
                 System.out.println();
             }
             ++i;
-            ++currentBatch;
         }
+        ++currentBatch;
         return new org.nd4j.linalg.dataset.MultiDataSet(new INDArray[] { input, decode }, new INDArray[] { prediction },
                 new INDArray[] { inputMask, predictionMask }, new INDArray[] { predictionMask });
     }
