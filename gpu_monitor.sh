@@ -29,7 +29,7 @@ do
      load_10=$(( load_10 + 1 ))
    fi
 
-   echo "$load_100 / $load_95 / $load_80 / $load_10 = $(( load_100 * 100 / i ))% / $(( load_95 * 100 / i ))% / $(( load_80 * 100 / i ))% / $(( load_10 * 100 / i ))%"
+   echo -n "$load_100 / $load_95 / $load_80 / $load_10 = $(( load_100 * 100 / i ))% / $(( load_95 * 100 / i ))% / $(( load_80 * 100 / i ))% / $(( load_10 * 100 / i ))%                  \r"
    i=$(( i + 1 ))
    sleep 0.1
 done
