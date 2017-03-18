@@ -162,16 +162,12 @@ public class Main {
         LogsIterator logsIterator = new LogsIterator(logs, MINIBATCH_SIZE, MACROBATCH_SIZE, dict.size(), ROW_SIZE, revDict);
         for (int epoch = 1; epoch < 10000; ++epoch) {
             System.out.println("Epoch " + epoch);
-            // Collections.shuffle(logs);
             int i = 0;
             String shift = System.getProperty("dlchat.shift");
             if (epoch == 1 && shift != null) {
                 logsIterator.setCurrentBatch(Integer.valueOf(shift));
             }
             int lastPerc = 0;
-            /*
-             * net.fit(logsIterator); saveModel(net, networkFile); test(net);
-             */
             logsIterator.reset();
             while (logsIterator.hasNextMacrobatch()) {
                 long t1 = System.nanoTime();
