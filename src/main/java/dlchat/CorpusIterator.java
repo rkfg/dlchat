@@ -3,7 +3,6 @@ package dlchat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.nd4j.linalg.api.ndarray.INDArray;
@@ -26,8 +25,6 @@ public class CorpusIterator implements MultiDataSetIterator {
      * it advances (manually) to the next macrobatch.
      */
 
-    private static final boolean DEBUG = false;
-
     private List<List<Double>> logs;
     private int batchSize;
     private int batchesPerMacrobatch;
@@ -38,16 +35,12 @@ public class CorpusIterator implements MultiDataSetIterator {
     private int dictSize;
     private int rowSize;
 
-    private Map<Double, String> revDict;
-
-    public CorpusIterator(List<List<Double>> logs, int batchSize, int batchesPerMacrobatch, int dictSize, int rowSize,
-            Map<Double, String> revDict) {
+    public CorpusIterator(List<List<Double>> logs, int batchSize, int batchesPerMacrobatch, int dictSize, int rowSize) {
         this.logs = logs;
         this.batchSize = batchSize;
         this.batchesPerMacrobatch = batchesPerMacrobatch;
         this.dictSize = dictSize;
         this.rowSize = rowSize;
-        this.revDict = revDict;
         totalBatches = logs.size() / batchSize + 1;
         totalMacroBatches = totalBatches / batchesPerMacrobatch + 1;
     }
@@ -68,17 +61,13 @@ public class CorpusIterator implements MultiDataSetIterator {
 
     @Override
     public MultiDataSet next(int num) {
-        long t1 = System.nanoTime();
         INDArray input = Nd4j.zeros(batchSize, 1, rowSize);
         INDArray prediction = Nd4j.zeros(batchSize, dictSize, rowSize);
         INDArray decode = Nd4j.zeros(batchSize, dictSize, rowSize);
         INDArray inputMask = Nd4j.zeros(batchSize, rowSize);
         INDArray predictionMask = Nd4j.zeros(batchSize, rowSize);
-        long t2 = System.nanoTime();
-        // System.out.println("Init time: " + (t2 - t1));
         int i = currentBatch * batchSize;
         for (int j = 0; j < batchSize; j++) {
-            long t3 = System.nanoTime();
             if (i > logs.size() - 2) {
                 break;
             }
@@ -106,38 +95,6 @@ public class CorpusIterator implements MultiDataSetIterator {
                     NDArrayIndex.interval(0, rowPred.size()) }, Nd4j.create(predOneHot));
             decode.put(new INDArrayIndex[] { NDArrayIndex.point(j), NDArrayIndex.interval(0, dictSize),
                     NDArrayIndex.interval(0, rowPred.size()) }, Nd4j.create(decodeOneHot));
-
-            long t4 = System.nanoTime();
-            // System.out.println("Array fill time: " + (t4 - t3));
-            if (DEBUG) {
-                System.out.println("Row in: " + rowIn);
-                INDArray inTensor = input.tensorAlongDimension(j, 1, 2);
-                System.out.println("input tensor: " + inTensor);
-                System.out.println("inputMask tensor: " + inputMask.tensorAlongDimension(j, 1));
-                INDArray decodeTensor = decode.tensorAlongDimension(j, 1, 2);
-                INDArray decodeMax = Nd4j.argMax(decodeTensor, 0);
-                System.out.println("decodeMax tensor: " + decodeMax);
-                System.out.println("decodeMask tensor: " + predictionMask.tensorAlongDimension(j, 1));
-                INDArray predTensor = prediction.tensorAlongDimension(j, 1, 2);
-                INDArray predMax = Nd4j.argMax(predTensor, 0);
-                System.out.println("predMax tensor: " + predMax);
-                System.out.println("predMask tensor: " + predictionMask.tensorAlongDimension(j, 1));
-                System.out.print("IN: ");
-                for (int sPos = 0; sPos < inTensor.size(1); sPos++) {
-                    System.out.print(revDict.get(inTensor.getDouble(sPos)) + " ");
-                }
-                System.out.println();
-                System.out.print("DECODE: ");
-                for (int sPos = 0; sPos < decodeMax.size(1); sPos++) {
-                    System.out.print(revDict.get(decodeMax.getDouble(sPos)) + " ");
-                }
-                System.out.println();
-                System.out.print("OUT: ");
-                for (int sPos = 0; sPos < predMax.size(1); sPos++) {
-                    System.out.print(revDict.get(predMax.getDouble(sPos)) + " ");
-                }
-                System.out.println();
-            }
             ++i;
         }
         ++currentBatch;

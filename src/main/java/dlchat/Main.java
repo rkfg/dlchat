@@ -112,7 +112,6 @@ public class Main {
     private final String CHARS = "-\\/_&" + CorpusProcessor.SPECIALS;
     private List<List<Double>> logs = new ArrayList<>();
     private Random rng = new Random();
-    // RNN dimensions
     public static final int HIDDEN_LAYER_WIDTH = 512; // this is purely empirical, affects performance and VRAM requirement
     private static final int EMBEDDING_WIDTH = 128; // one-hot vectors will be embedded to more dense vectors with this width
     private static final String CORPUS_FILENAME = "movie_lines.txt"; // filename of data corpus to learn
@@ -207,10 +206,9 @@ public class Main {
     private void learn(File networkFile) throws IOException {
         long lastSaveTime = System.currentTimeMillis();
         long lastTestTime = System.currentTimeMillis();
-        CorpusIterator logsIterator = new CorpusIterator(logs, MINIBATCH_SIZE, MACROBATCH_SIZE, dict.size(), ROW_SIZE, revDict);
+        CorpusIterator logsIterator = new CorpusIterator(logs, MINIBATCH_SIZE, MACROBATCH_SIZE, dict.size(), ROW_SIZE);
         for (int epoch = 1; epoch < 10000; ++epoch) {
             System.out.println("Epoch " + epoch);
-            int i = 0;
             String shift = System.getProperty("dlchat.shift");
             if (epoch == 1 && shift != null) {
                 logsIterator.setCurrentBatch(Integer.valueOf(shift));
@@ -262,7 +260,7 @@ public class Main {
                             }
                             System.out.println();
                             System.out.print("Out> ");
-                            output(wordIdxs, true, true);
+                            output(wordIdxs, true);
                         }
                     }
                 };
@@ -295,11 +293,11 @@ public class Main {
         }
         System.out.println();
         System.out.print("Out: ");
-        output(rowIn, true, true);
+        output(rowIn, true);
         System.out.println("====================== TEST END ======================");
     }
 
-    private void output(List<Double> rowIn, boolean printUnknowns, boolean stopOnEos) {
+    private void output(List<Double> rowIn, boolean printUnknowns) {
         net.rnnClearPreviousState();
         Collections.reverse(rowIn);
         INDArray in = Nd4j.create(ArrayUtils.toPrimitive(rowIn.toArray(new Double[0])), new int[] { 1, 1, rowIn.size() });
@@ -330,7 +328,7 @@ public class Main {
                     break;
                 }
             }
-            if (stopOnEos && idx == 1) {
+            if (idx == 1) {
                 break;
             }
             double[] newDecodeArr = new double[dict.size()];
