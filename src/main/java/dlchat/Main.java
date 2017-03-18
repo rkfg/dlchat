@@ -155,7 +155,7 @@ public class Main {
     private void learn(ComputationGraph net, File networkFile) throws IOException {
         long lastSaveTime = System.currentTimeMillis();
         long lastTestTime = System.currentTimeMillis();
-        LogsIterator logsIterator = new LogsIterator(logs, MINIBATCH_SIZE, dict.size(), ROW_SIZE, revDict);
+        LogsIterator logsIterator = new LogsIterator(logs, MINIBATCH_SIZE, MACROBATCH_SIZE, dict.size(), ROW_SIZE, revDict);
         for (int epoch = 1; epoch < 10000; ++epoch) {
             System.out.println("Epoch " + epoch);
             // Collections.shuffle(logs);
@@ -168,10 +168,12 @@ public class Main {
             /*
              * net.fit(logsIterator); saveModel(net, networkFile); test(net);
              */
-            while (logsIterator.hasNext()) {
+            logsIterator.reset();
+            while (logsIterator.hasNextMacrobatch()) {
                 long t1 = System.nanoTime();
-                net.fit(logsIterator.next());
+                net.fit(logsIterator);
                 long t2 = System.nanoTime();
+                logsIterator.nextMacroBatch();
                 System.out.println("Fit time: " + (t2 - t1));
                 System.out.println("Batch = " + logsIterator.batch());
                 int newPerc = (logsIterator.batch() * 100 / logsIterator.totalBatches());

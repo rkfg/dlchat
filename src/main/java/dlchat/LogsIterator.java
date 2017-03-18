@@ -17,29 +17,48 @@ import org.nd4j.linalg.indexing.NDArrayIndex;
 @SuppressWarnings("serial")
 public class LogsIterator implements MultiDataSetIterator {
 
+    /*
+     * Motivation: I want to get asynchronous data iteration while not blocking on net.fit() until the end of epoch. I want to checkpoint
+     * the network, show intermediate test results and some stats, it would be harder to achieve with listeners I think so this is how I
+     * solved the problem. This way the learn process is asynchronous inside one macrobatch and synchronous across all the macrobatches.
+     * 
+     * Macrobatch is a group of minibatches. The iterator is modified so that it reports the end of data when it exhausts a macrobatch. Then
+     * it advances (manually) to the next macrobatch.
+     */
+
     private static final boolean DEBUG = false;
 
     private List<List<Double>> logs;
     private int batchSize;
+    private int batchesPerMacrobatch;
     private int totalBatches;
+    private int totalMacroBatches;
     private int currentBatch = 0;
+    private int currentMacroBatch = 0;
     private int dictSize;
     private int rowSize;
 
     private Map<Double, String> revDict;
 
-    public LogsIterator(List<List<Double>> logs, int batchSize, int dictSize, int rowSize, Map<Double, String> revDict) {
+    public LogsIterator(List<List<Double>> logs, int batchSize, int batchesPerMacrobatch, int dictSize, int rowSize,
+            Map<Double, String> revDict) {
         this.logs = logs;
         this.batchSize = batchSize;
+        this.batchesPerMacrobatch = batchesPerMacrobatch;
         this.dictSize = dictSize;
         this.rowSize = rowSize;
         this.revDict = revDict;
         totalBatches = logs.size() / batchSize + 1;
+        totalMacroBatches = totalBatches / batchesPerMacrobatch + 1;
     }
 
     @Override
     public boolean hasNext() {
-        return currentBatch < totalBatches;
+        return currentBatch < totalBatches && getMacroBatchByCurrentBatch() == currentMacroBatch;
+    }
+
+    private int getMacroBatchByCurrentBatch() {
+        return currentBatch / batchesPerMacrobatch;
     }
 
     @Override
@@ -56,7 +75,7 @@ public class LogsIterator implements MultiDataSetIterator {
         INDArray inputMask = Nd4j.zeros(batchSize, rowSize);
         INDArray predictionMask = Nd4j.zeros(batchSize, rowSize);
         long t2 = System.nanoTime();
-//        System.out.println("Init time: " + (t2 - t1));
+        // System.out.println("Init time: " + (t2 - t1));
         int i = currentBatch * batchSize;
         for (int j = 0; j < batchSize; j++) {
             long t3 = System.nanoTime();
@@ -89,7 +108,7 @@ public class LogsIterator implements MultiDataSetIterator {
                     NDArrayIndex.interval(0, rowPred.size()) }, Nd4j.create(decodeOneHot));
 
             long t4 = System.nanoTime();
-//            System.out.println("Array fill time: " + (t4 - t3));
+            // System.out.println("Array fill time: " + (t4 - t3));
             if (DEBUG) {
                 System.out.println("Row in: " + rowIn);
                 INDArray inTensor = input.tensorAlongDimension(j, 1, 2);
@@ -133,7 +152,7 @@ public class LogsIterator implements MultiDataSetIterator {
 
     @Override
     public boolean resetSupported() {
-        return true;
+        return false;
     }
 
     @Override
@@ -144,6 +163,7 @@ public class LogsIterator implements MultiDataSetIterator {
     @Override
     public void reset() {
         currentBatch = 0;
+        currentMacroBatch = 0;
     }
 
     public int batch() {
@@ -156,6 +176,14 @@ public class LogsIterator implements MultiDataSetIterator {
 
     public void setCurrentBatch(int currentBatch) {
         this.currentBatch = currentBatch;
+    }
+
+    public boolean hasNextMacrobatch() {
+        return getMacroBatchByCurrentBatch() < totalMacroBatches && currentMacroBatch < totalMacroBatches;
+    }
+
+    public void nextMacroBatch() {
+        ++currentMacroBatch;
     }
 
 }
