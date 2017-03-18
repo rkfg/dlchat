@@ -100,6 +100,14 @@ public class Main {
      * updated for the next iteration. The result is fed to the output softmax layer and then we sample it randomly (not with argMax(), it
      * tends to give a lot of same tokens in a row). The resulting token is show to the user according to the dictionary and then goes to
      * the next iteration as the decoder input and so on until we get <eos>.
+     *
+     * JVM properties used:
+     * 
+     * -Ddlchat.dialog to start the dialog (testing) mode
+     * 
+     * -Ddlchat.shift=1800 (for instance) to continue the training process from that batch number; batch numbers are printed after each
+     * processed macrobatch. If you changed the minibatch size after the last launch, recalculate the number accordingly, i.e. if you
+     * doubled the minibatch size, specify half of the value and so on.
      * 
      * [1] https://arxiv.org/abs/1506.05869 A Neural Conversational Model
      * 
@@ -183,10 +191,11 @@ public class Main {
 
         ComputationGraphConfiguration conf = graphBuilder.build();
         File networkFile = new File(MODEL_FILENAME);
+        boolean dialogMode = System.getProperty("dlchat.dialog") != null;
         if (networkFile.exists()) {
             System.out.println("Loading the existing network...");
             net = ModelSerializer.restoreComputationGraph(networkFile);
-            if (args.length == 0) {
+            if (!dialogMode) {
                 test();
             }
         } else {
@@ -194,8 +203,7 @@ public class Main {
             net = new ComputationGraph(conf);
             net.init();
         }
-
-        if (args.length == 1 && args[0].equals("dialog")) {
+        if (dialogMode) {
             startDialog();
         } else {
             net.setListeners(new ScoreIterationListener(1));
@@ -217,11 +225,8 @@ public class Main {
             }
             int lastPerc = 0;
             while (logsIterator.hasNextMacrobatch()) {
-                long t1 = System.nanoTime();
                 net.fit(logsIterator);
-                long t2 = System.nanoTime();
                 logsIterator.nextMacroBatch();
-                System.out.println("Fit time: " + (t2 - t1));
                 System.out.println("Batch = " + logsIterator.batch());
                 int newPerc = (logsIterator.batch() * 100 / logsIterator.totalBatches());
                 if (newPerc != lastPerc) {
