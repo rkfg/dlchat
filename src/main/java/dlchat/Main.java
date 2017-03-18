@@ -29,6 +29,7 @@ import org.deeplearning4j.nn.conf.ComputationGraphConfiguration.GraphBuilder;
 import org.deeplearning4j.nn.conf.GradientNormalization;
 import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
 import org.deeplearning4j.nn.conf.Updater;
+import org.deeplearning4j.nn.conf.graph.MergeVertex;
 import org.deeplearning4j.nn.conf.graph.rnn.DuplicateToTimeSeriesVertex;
 import org.deeplearning4j.nn.conf.graph.rnn.LastTimeStepVertex;
 import org.deeplearning4j.nn.conf.inputs.InputType;
@@ -172,10 +173,11 @@ public class Main {
                         "embeddingEncoder")
                 .addVertex("thoughtVector", new LastTimeStepVertex("inputLine"), "encoder")
                 .addVertex("dup", new DuplicateToTimeSeriesVertex("decoderInput"), "thoughtVector")
+                .addVertex("merge", new MergeVertex(), "decoderInput", "dup")
                 .addLayer("decoder",
                         new GravesLSTM.Builder().nIn(dict.size() + HIDDEN_LAYER_WIDTH).nOut(HIDDEN_LAYER_WIDTH).activation(Activation.TANH)
                                 .build(),
-                        "decoderInput", "dup")
+                        "merge")
                 .addLayer("output", new RnnOutputLayer.Builder().nIn(HIDDEN_LAYER_WIDTH).nOut(dict.size()).activation(Activation.SOFTMAX)
                         .lossFunction(LossFunctions.LossFunction.MCXENT).build(), "decoder")
                 .setOutputs("output");
@@ -304,11 +306,11 @@ public class Main {
         double[] decodeArr = new double[dict.size()];
         decodeArr[2] = 1;
         INDArray decode = Nd4j.create(decodeArr, new int[] { 1, dict.size(), 1 });
-        net.outputSingle(in, decode);
+        net.feedForward(new INDArray[] { in, decode }, false);
         org.deeplearning4j.nn.layers.recurrent.GravesLSTM decoder = (org.deeplearning4j.nn.layers.recurrent.GravesLSTM) net
                 .getLayer("decoder");
         Layer output = net.getLayer("output");
-        GraphVertex mergeVertex = net.getVertex("decoder-merge");
+        GraphVertex mergeVertex = net.getVertex("merge");
         INDArray thoughtVector = mergeVertex.getInputs()[1];
         for (int row = 0; row < ROW_SIZE; ++row) {
             mergeVertex.setInputs(decode, thoughtVector);
