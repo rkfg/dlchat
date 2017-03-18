@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class LogProcessor {
+public class CorpusProcessor {
     public static final String SPECIALS = "!\"#$;%^:?*()[]{}<>«»,.–—=+…";
     private Set<String> dictSet = new HashSet<>();
     private Map<String, Double> freq = new HashMap<>();
@@ -23,11 +23,11 @@ public class LogProcessor {
     private InputStream is;
     private int rowSize;
 
-    public LogProcessor(String filename, int rowSize, boolean countFreq) throws FileNotFoundException {
+    public CorpusProcessor(String filename, int rowSize, boolean countFreq) throws FileNotFoundException {
         this(new FileInputStream(filename), rowSize, countFreq);
     }
 
-    public LogProcessor(InputStream is, int rowSize, boolean countFreq) {
+    public CorpusProcessor(InputStream is, int rowSize, boolean countFreq) {
         this.is = is;
         this.rowSize = rowSize;
         this.countFreq = countFreq;
@@ -66,10 +66,10 @@ public class LogProcessor {
     }
 
     protected void processLine(String lastLine) {
-        doProcessLine(lastLine, dictSet, false);
+        tokenizeLine(lastLine, dictSet, false);
     }
 
-    protected void doProcessLine(String lastLine, Collection<String> resultCollection, boolean addSpecials) {
+    protected void tokenizeLine(String lastLine, Collection<String> resultCollection, boolean addSpecials) {
         String[] words = lastLine.split("[ \t]");
         for (String word : words) {
             if (!word.isEmpty()) {
@@ -125,7 +125,7 @@ public class LogProcessor {
         this.dict = dict;
     }
 
-    protected boolean processWords(Collection<String> words, List<Double> wordIdxs) {
+    protected boolean wordsToIndexes(Collection<String> words, List<Double> wordIdxs) {
         int i = rowSize;
         for (String word : words) {
             if (--i == 0) {

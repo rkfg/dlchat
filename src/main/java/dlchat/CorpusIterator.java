@@ -15,7 +15,7 @@ import org.nd4j.linalg.indexing.INDArrayIndex;
 import org.nd4j.linalg.indexing.NDArrayIndex;
 
 @SuppressWarnings("serial")
-public class LogsIterator implements MultiDataSetIterator {
+public class CorpusIterator implements MultiDataSetIterator {
 
     /*
      * Motivation: I want to get asynchronous data iteration while not blocking on net.fit() until the end of epoch. I want to checkpoint
@@ -40,7 +40,7 @@ public class LogsIterator implements MultiDataSetIterator {
 
     private Map<Double, String> revDict;
 
-    public LogsIterator(List<List<Double>> logs, int batchSize, int batchesPerMacrobatch, int dictSize, int rowSize,
+    public CorpusIterator(List<List<Double>> logs, int batchSize, int batchesPerMacrobatch, int dictSize, int rowSize,
             Map<Double, String> revDict) {
         this.logs = logs;
         this.batchSize = batchSize;

@@ -109,7 +109,7 @@ public class Main {
 
     public final Map<String, Double> dict = new HashMap<>();
     public final Map<Double, String> revDict = new HashMap<>();
-    private final String CHARS = "-\\/_&" + LogProcessor.SPECIALS;
+    private final String CHARS = "-\\/_&" + CorpusProcessor.SPECIALS;
     private List<List<Double>> logs = new ArrayList<>();
     private Random rng = new Random();
     // RNN dimensions
@@ -207,7 +207,7 @@ public class Main {
     private void learn(File networkFile) throws IOException {
         long lastSaveTime = System.currentTimeMillis();
         long lastTestTime = System.currentTimeMillis();
-        LogsIterator logsIterator = new LogsIterator(logs, MINIBATCH_SIZE, MACROBATCH_SIZE, dict.size(), ROW_SIZE, revDict);
+        CorpusIterator logsIterator = new CorpusIterator(logs, MINIBATCH_SIZE, MACROBATCH_SIZE, dict.size(), ROW_SIZE, revDict);
         for (int epoch = 1; epoch < 10000; ++epoch) {
             System.out.println("Epoch " + epoch);
             int i = 0;
@@ -248,14 +248,14 @@ public class Main {
             while (true) {
                 System.out.print("In> ");
                 String line = "1 +++$+++ u11 +++$+++ m0 +++$+++ WALTER +++$+++ " + scanner.nextLine() + "\n";
-                LogProcessor dialogProcessor = new LogProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)), ROW_SIZE,
+                CorpusProcessor dialogProcessor = new CorpusProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)), ROW_SIZE,
                         false) {
                     @Override
                     protected void processLine(String lastLine) {
                         List<String> words = new ArrayList<>();
-                        doProcessLine(lastLine, words, true);
+                        tokenizeLine(lastLine, words, true);
                         List<Double> wordIdxs = new ArrayList<>();
-                        if (processWords(words, wordIdxs)) {
+                        if (wordsToIndexes(words, wordIdxs)) {
                             System.out.print("Got words: ");
                             for (Double idx : wordIdxs) {
                                 System.out.print(revDict.get(idx) + " ");
@@ -342,7 +342,7 @@ public class Main {
 
     private void prepareData(double idx) throws IOException, FileNotFoundException {
         System.out.println("Building the dictionary...");
-        LogProcessor logProcessor = new LogProcessor(CORPUS_FILENAME, ROW_SIZE, true);
+        CorpusProcessor logProcessor = new CorpusProcessor(CORPUS_FILENAME, ROW_SIZE, true);
         logProcessor.start();
         Map<String, Double> freqs = logProcessor.getFreq();
         Set<String> dictSet = new TreeSet<>();
@@ -382,15 +382,14 @@ public class Main {
             }
         }
         System.out.println("Total dictionary size is " + dict.size() + ". Processing the dataset...");
-        // System.out.println(dict);
-        logProcessor = new LogProcessor(CORPUS_FILENAME, ROW_SIZE, false) {
+        logProcessor = new CorpusProcessor(CORPUS_FILENAME, ROW_SIZE, false) {
             @Override
             protected void processLine(String lastLine) {
                 List<Double> wordIdxs = new ArrayList<>();
                 ArrayList<String> words = new ArrayList<>();
-                doProcessLine(lastLine, words, true);
+                tokenizeLine(lastLine, words, true);
                 if (!words.isEmpty()) {
-                    if (processWords(words, wordIdxs)) {
+                    if (wordsToIndexes(words, wordIdxs)) {
                         logs.add(wordIdxs);
                     }
                 }
