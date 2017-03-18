@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Random;
+import java.util.Scanner;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -198,29 +199,31 @@ public class Main {
 
     private void startDialog(ComputationGraph net) throws IOException {
         System.out.println("Dialog started.");
-        while (true) {
-            System.out.print("In> ");
-            String line = "1 +++$+++ u11 +++$+++ m0 +++$+++ WALTER +++$+++ " + System.console().readLine() + "\n";
-            LogProcessor dialogProcessor = new LogProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)), ROW_SIZE,
-                    false) {
-                @Override
-                protected void processLine(String lastLine) {
-                    List<String> words = new ArrayList<>();
-                    doProcessLine(lastLine, words, true);
-                    List<Double> wordIdxs = new ArrayList<>();
-                    if (processWords(words, wordIdxs)) {
-                        System.out.print("Got words: ");
-                        for (Double idx : wordIdxs) {
-                            System.out.print(revDict.get(idx) + " ");
+        try (Scanner scanner = new Scanner(System.in)) {
+            while (true) {
+                System.out.print("In> ");
+                String line = "1 +++$+++ u11 +++$+++ m0 +++$+++ WALTER +++$+++ " + scanner.nextLine() + "\n";
+                LogProcessor dialogProcessor = new LogProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)), ROW_SIZE,
+                        false) {
+                    @Override
+                    protected void processLine(String lastLine) {
+                        List<String> words = new ArrayList<>();
+                        doProcessLine(lastLine, words, true);
+                        List<Double> wordIdxs = new ArrayList<>();
+                        if (processWords(words, wordIdxs)) {
+                            System.out.print("Got words: ");
+                            for (Double idx : wordIdxs) {
+                                System.out.print(revDict.get(idx) + " ");
+                            }
+                            System.out.println();
+                            System.out.print("Out> ");
+                            output(net, wordIdxs, true, true);
                         }
-                        System.out.println();
-                        System.out.print("Out> ");
-                        output(net, wordIdxs, true, true);
                     }
-                }
-            };
-            dialogProcessor.setDict(dict);
-            dialogProcessor.start();
+                };
+                dialogProcessor.setDict(dict);
+                dialogProcessor.start();
+            }
         }
     }
 
