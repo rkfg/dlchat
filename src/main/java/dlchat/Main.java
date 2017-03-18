@@ -40,8 +40,6 @@ import org.deeplearning4j.nn.graph.vertex.GraphVertex;
 import org.deeplearning4j.nn.weights.WeightInit;
 import org.deeplearning4j.optimize.listeners.ScoreIterationListener;
 import org.deeplearning4j.util.ModelSerializer;
-import org.nd4j.jita.conf.Configuration;
-import org.nd4j.jita.conf.CudaEnvironment;
 import org.nd4j.linalg.activations.Activation;
 import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
@@ -49,29 +47,90 @@ import org.nd4j.linalg.lossfunctions.LossFunctions;
 
 public class Main {
 
+    /*
+     * This is a seq2seq encoder-decoder LSTM model made according to the Google's paper: [1] The model tries to predict the next dialog
+     * line using the provided one. It learns on the Cornell Movie Dialogs corpus. Unlike simple char RNNs this model is more sophisticated
+     * and theoretically, given enough time and data, can deduce facts from raw text. Your mileage may vary. This particular code is based
+     * on AdditionRNN but heavily changed to be used with a huge amount of possible tokens (10-20k), it also utilizes the decoder input
+     * unlike AdditionRNN.
+     * 
+     * Special tokens used:
+     * 
+     * <unk> - replaces any word or other token that's not in the dictionary (too rare to be included or completely unknown)
+     * 
+     * <eos> - end of sentence, used only in the output to stop the processing; the model input and output length is limited by the ROW_SIZE
+     * constant.
+     * 
+     * <go> - used only in the decoder input as the first token before the model produced anything
+     * 
+     * The architecture is like this: Input => Embedding Layer => Encoder => Decoder => Output (softmax)
+     * 
+     * The encoder layer produces a so called "thought vector" that contains a compressed representation of the input. Depending on that
+     * vector the model produces different sentences even if they start with the same token. There's one more input, connected directly to
+     * the decoder layer, it's used to provide the previous token of the output. For the very first output token we send a special <go>
+     * token there, on the next iteration we use the token that the model produced the last time. On the training stage everything is
+     * simple, we apriori know the desired output so the decoder input would be the same token set prepended with the <go> token and without
+     * the last <eos> token. Example:
+     * 
+     * Input: "how" "do" "you" "do" "?"
+     * 
+     * Output: "I'm" "fine" "," "thanks" "!" "<eos>"
+     * 
+     * Decoder: "<go>" "I'm" "fine" "," "thanks" "!"
+     * 
+     * Actually, the input is reversed as per [2], the most important words are usually in the beginning of the phrase and they would get
+     * more weight if supplied last (the model "forgets" tokens that were supplied "long ago"). The output and decoder input sequence
+     * lengths are always equal. The input and output could be of any length (less than ROW_SIZE) so for purpose of batching we mask the
+     * unused part of the row. The encoder and decoder networks work sequentially. First the encoder creates the thought vector, that is the
+     * last activations of the layer. Those activations are then duplicated for as many time steps as there are elements in the output so
+     * that every output element can have its own copy of the thought vector. Then the decoder starts working. It receives two inputs, the
+     * thought vector made by the encoder and the token that it _should have produced_ (but usually it outputs something else so we have our
+     * loss metric and can compute gradients for the backward pass) on the previous step (or <go> for the very first step). These two
+     * vectors are simply concatenated by the merge vertex. The decoder's output goes to the softmax layer and that's it.
+     * 
+     * The test phase is much more tricky. We don't know the decoder input because we don't know the output yet (unlike in the train phase),
+     * it could be anything. So we can't use methods like outputSingle() and have to do some manual work. Actually, we can but it would
+     * require full restarts of the entire process, it's super slow and ineffective.
+     * 
+     * First, we do a single feed forward pass for the input with a single decoder element, <go>. We don't need the actual activations
+     * except the "thought vector". It resides in the second merge vertex input (named "dup"). So we get it and store for the entire
+     * response generation time. Then we put the decoder input (<go> for the first iteration) and the thought vector to the merge vertex
+     * inputs and feed it forward. The result goes to the decoder layer, now with rnnTimeStep() method so that the internal layer state is
+     * updated for the next iteration. The result is fed to the output softmax layer and then we sample it randomly (not with argMax(), it
+     * tends to give a lot of same tokens in a row). The resulting token is show to the user according to the dictionary and then goes to
+     * the next iteration as the decoder input and so on until we get <eos>.
+     * 
+     * [1] https://arxiv.org/abs/1506.05869 A Neural Conversational Model
+     * 
+     * [2] https://papers.nips.cc/paper/5346-sequence-to-sequence-learning-with-neural-networks.pdf Sequence to Sequence Learning with
+     * Neural Networks
+     */
+
     public final Map<String, Double> dict = new HashMap<>();
     public final Map<Double, String> revDict = new HashMap<>();
     private final String CHARS = "-\\/_&" + LogProcessor.SPECIALS;
     private List<List<Double>> logs = new ArrayList<>();
     private Random rng = new Random();
     // RNN dimensions
-    public static final int HIDDEN_LAYER_WIDTH = 512;
-    private static final int EMBEDDING_WIDTH = 256;
-    private static final String CORPUS_FILENAME = "movie_lines.txt";
-    private static final String NETWORK_FILE_PATH = "rnn_train.zip";
-    private static final String BACKUP_FILENAME = "rnn_train.bak.zip";
-    private static final int MINIBATCH_SIZE = 64;
+    public static final int HIDDEN_LAYER_WIDTH = 512; // this is purely empirical, affects performance and VRAM requirement
+    private static final int EMBEDDING_WIDTH = 128; // one-hot vectors will be embedded to more dense vectors with this width
+    private static final String CORPUS_FILENAME = "movie_lines.txt"; // filename of data corpus to learn
+    private static final String MODEL_FILENAME = "rnn_train.zip"; // filename of the model
+    private static final String BACKUP_MODEL_FILENAME = "rnn_train.bak.zip"; // filename of the previous version of the model (backup)
+    private static final int MINIBATCH_SIZE = 32;
     private static final Random rnd = new Random(new Date().getTime());
-    private static final long SAVE_EACH_MS = TimeUnit.MINUTES.toMillis(5);
-    private static final long TEST_EACH_MS = TimeUnit.MINUTES.toMillis(1);
-    private static final int MAX_DICT = 10000;
+    private static final long SAVE_EACH_MS = TimeUnit.MINUTES.toMillis(5); // save the model with this period
+    private static final long TEST_EACH_MS = TimeUnit.MINUTES.toMillis(1); // test the model with this period
+    private static final int MAX_DICT = 20000; // this number of most frequent words will be used, unknown words (that are not in the
+                                               // dictionary) are replaced with <unk> token
     private static final int TBPTT_SIZE = 25;
     private static final double LEARNING_RATE = 1e-1;
     private static final double L2 = 1e-3;
     private static final double RMS_DECAY = 0.95;
-    private static final int ROW_SIZE = 40;
-    private static final int GC_WINDOW = 5000;
-    private static final int MACROBATCH_SIZE = 10;
+    private static final int ROW_SIZE = 40; // maximum line length in tokens
+    private static final int GC_WINDOW = 2000; // delay between garbage collections, try to reduce if you run out of VRAM or increase for
+                                               // better performance
+    private static final int MACROBATCH_SIZE = 20;
     private ComputationGraph net;
 
     public static void main(String[] args) throws IOException {
@@ -122,7 +181,7 @@ public class Main {
                 .setOutputs("output");
 
         ComputationGraphConfiguration conf = graphBuilder.build();
-        File networkFile = new File(NETWORK_FILE_PATH);
+        File networkFile = new File(MODEL_FILENAME);
         if (networkFile.exists()) {
             System.out.println("Loading the existing network...");
             net = ModelSerializer.restoreComputationGraph(networkFile);
@@ -213,7 +272,7 @@ public class Main {
 
     private void saveModel(File networkFile) throws IOException {
         System.out.println("Saving the model...");
-        File backup = new File(BACKUP_FILENAME);
+        File backup = new File(BACKUP_MODEL_FILENAME);
         if (networkFile.exists()) {
             if (backup.exists()) {
                 backup.delete();
