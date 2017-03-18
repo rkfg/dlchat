@@ -283,25 +283,17 @@ public class Main {
         double[] decodeArr = new double[dict.size()];
         decodeArr[2] = 1;
         INDArray decode = Nd4j.create(decodeArr, new int[] { 1, dict.size(), 1 });
-        Map<String, INDArray> feedForward = net.feedForward(new INDArray[] { in, decode }, false);
-        INDArray thoughtVector = feedForward.get("encoder").reshape(1, HIDDEN_LAYER_WIDTH, 1);
-        System.out.println("Thought=" + thoughtVector);
-        Layer decoder = net.getLayer("decoder");
+        net.outputSingle(in, decode);
+        org.deeplearning4j.nn.layers.recurrent.GravesLSTM decoder = (org.deeplearning4j.nn.layers.recurrent.GravesLSTM) net
+                .getLayer("decoder");
         Layer output = net.getLayer("output");
-        System.out.println("Output=" + output);
         GraphVertex mergeVertex = net.getVertex("decoder-merge");
+        INDArray thoughtVector = mergeVertex.getInputs()[1];
         for (int row = 0; row < ROW_SIZE; ++row) {
-            // System.out.println("THOUGHT SHAPE: " + thoughtVector.shapeInfoToString() + " DECODE SHAPE: " + decode.shapeInfoToString());
             mergeVertex.setInputs(decode, thoughtVector);
             INDArray merged = mergeVertex.doForward(false);
-            INDArray activateDec = decoder.activate(merged, false);
-            //System.out.println("ActivateDec shape=" + activateDec.shapeInfoToString());
-            //System.out.println("ActivateDec=" + activateDec);
+            INDArray activateDec = decoder.rnnTimeStep(merged);
             INDArray out = output.activate(activateDec, false);
-            //System.out.println("OutputDec shape=" + out.shapeInfoToString());
-            //System.out.println("OutputDec=" + out);
-            // INDArray out = net.outputSingle(in, decode);
-            // System.out.println("OUT SHAPE: " + out.shapeInfoToString());
             double d = rng.nextDouble();
             double sum = 0.0;
             int idx = -1;
@@ -321,7 +313,6 @@ public class Main {
             double[] newDecodeArr = new double[dict.size()];
             newDecodeArr[idx] = 1;
             decode = Nd4j.create(newDecodeArr, new int[] { 1, dict.size(), 1 });
-            // decode = Nd4j.concat(2, decode, newDecode);
         }
         System.out.println();
     }
