@@ -24,7 +24,6 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.deeplearning4j.nn.api.Layer;
 import org.deeplearning4j.nn.api.OptimizationAlgorithm;
 import org.deeplearning4j.nn.conf.BackpropType;
-import org.deeplearning4j.nn.conf.ComputationGraphConfiguration;
 import org.deeplearning4j.nn.conf.ComputationGraphConfiguration.GraphBuilder;
 import org.deeplearning4j.nn.conf.GradientNormalization;
 import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
@@ -118,7 +117,7 @@ public class Main {
     public final Map<String, Double> dict = new HashMap<>();
     public final Map<Double, String> revDict = new HashMap<>();
     private final String CHARS = "-\\/_&" + CorpusProcessor.SPECIALS;
-    private List<List<Double>> logs = new ArrayList<>();
+    private List<List<Double>> corpus = new ArrayList<>();
     private Random rng = new Random();
     public static final int HIDDEN_LAYER_WIDTH = 512; // this is purely empirical, affects performance and VRAM requirement
     private static final int EMBEDDING_WIDTH = 128; // one-hot vectors will be embedded to more dense vectors with this width
@@ -149,22 +148,26 @@ public class Main {
         Nd4j.ENFORCE_NUMERICAL_STABILITY = true;
         Nd4j.getMemoryManager().setAutoGcWindow(GC_WINDOW);
 
-        double idx = 3.0;
-        dict.put("<unk>", 0.0);
-        revDict.put(0.0, "<unk>");
-        dict.put("<eos>", 1.0);
-        revDict.put(1.0, "<eos>");
-        dict.put("<go>", 2.0);
-        revDict.put(2.0, "<go>");
-        for (char c : CHARS.toCharArray()) {
-            if (!dict.containsKey(c)) {
-                dict.put(String.valueOf(c), idx);
-                revDict.put(idx, String.valueOf(c));
-                ++idx;
-            }
-        }
-        prepareData(idx);
+        createDictionary();
 
+        File networkFile = new File(MODEL_FILENAME);
+        if (networkFile.exists()) {
+            System.out.println("Loading the existing network...");
+            net = ModelSerializer.restoreComputationGraph(networkFile);
+            if (System.getProperty("dlchat.dialog") != null) {
+                startDialog();
+            } else {
+                test();
+            }
+        } else {
+            System.out.println("Creating a new network...");
+            createComputationGraph();
+        }
+        net.setListeners(new ScoreIterationListener(1));
+        train(networkFile);
+    }
+
+    public void createComputationGraph() {
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
         builder.iterations(1).learningRate(LEARNING_RATE).rmsDecay(RMS_DECAY)
                 .optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT).miniBatch(true).updater(Updater.RMSPROP)
@@ -189,32 +192,14 @@ public class Main {
                         .lossFunction(LossFunctions.LossFunction.MCXENT).build(), "decoder")
                 .setOutputs("output");
 
-        ComputationGraphConfiguration conf = graphBuilder.build();
-        File networkFile = new File(MODEL_FILENAME);
-        boolean dialogMode = System.getProperty("dlchat.dialog") != null;
-        if (networkFile.exists()) {
-            System.out.println("Loading the existing network...");
-            net = ModelSerializer.restoreComputationGraph(networkFile);
-            if (!dialogMode) {
-                test();
-            }
-        } else {
-            System.out.println("Creating a new network...");
-            net = new ComputationGraph(conf);
-            net.init();
-        }
-        if (dialogMode) {
-            startDialog();
-        } else {
-            net.setListeners(new ScoreIterationListener(1));
-            learn(networkFile);
-        }
+        net = new ComputationGraph(graphBuilder.build());
+        net.init();
     }
 
-    private void learn(File networkFile) throws IOException {
+    private void train(File networkFile) throws IOException {
         long lastSaveTime = System.currentTimeMillis();
         long lastTestTime = System.currentTimeMillis();
-        CorpusIterator logsIterator = new CorpusIterator(logs, MINIBATCH_SIZE, MACROBATCH_SIZE, dict.size(), ROW_SIZE);
+        CorpusIterator logsIterator = new CorpusIterator(corpus, MINIBATCH_SIZE, MACROBATCH_SIZE, dict.size(), ROW_SIZE);
         for (int epoch = 1; epoch < 10000; ++epoch) {
             System.out.println("Epoch " + epoch);
             String shift = System.getProperty("dlchat.shift");
@@ -291,8 +276,8 @@ public class Main {
 
     private void test() {
         System.out.println("======================== TEST ========================");
-        int selected = rnd.nextInt(logs.size());
-        List<Double> rowIn = new ArrayList<>(logs.get(selected));
+        int selected = rnd.nextInt(corpus.size());
+        List<Double> rowIn = new ArrayList<>(corpus.get(selected));
         System.out.print("In: ");
         for (Double idx : rowIn) {
             System.out.print(revDict.get(idx) + " ");
@@ -344,7 +329,21 @@ public class Main {
         System.out.println();
     }
 
-    private void prepareData(double idx) throws IOException, FileNotFoundException {
+    private void createDictionary() throws IOException, FileNotFoundException {
+        double idx = 3.0;
+        dict.put("<unk>", 0.0);
+        revDict.put(0.0, "<unk>");
+        dict.put("<eos>", 1.0);
+        revDict.put(1.0, "<eos>");
+        dict.put("<go>", 2.0);
+        revDict.put(2.0, "<go>");
+        for (char c : CHARS.toCharArray()) {
+            if (!dict.containsKey(c)) {
+                dict.put(String.valueOf(c), idx);
+                revDict.put(idx, String.valueOf(c));
+                ++idx;
+            }
+        }
         System.out.println("Building the dictionary...");
         CorpusProcessor corpusProcessor = new CorpusProcessor(CORPUS_FILENAME, ROW_SIZE, true);
         corpusProcessor.start();
@@ -398,14 +397,14 @@ public class Main {
                 if (!words.isEmpty()) {
                     List<Double> wordIdxs = new ArrayList<>();
                     if (wordsToIndexes(words, wordIdxs)) {
-                        logs.add(wordIdxs);
+                        corpus.add(wordIdxs);
                     }
                 }
             }
         };
         corpusProcessor.setDict(dict);
         corpusProcessor.start();
-        System.out.println("Done. Logs size is " + logs.size());
+        System.out.println("Done. Corpus size is " + corpus.size());
     }
 
 }
