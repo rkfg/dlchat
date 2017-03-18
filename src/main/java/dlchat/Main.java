@@ -342,27 +342,28 @@ public class Main {
 
     private void prepareData(double idx) throws IOException, FileNotFoundException {
         System.out.println("Building the dictionary...");
-        CorpusProcessor logProcessor = new CorpusProcessor(CORPUS_FILENAME, ROW_SIZE, true);
-        logProcessor.start();
-        Map<String, Double> freqs = logProcessor.getFreq();
-        Set<String> dictSet = new TreeSet<>();
+        CorpusProcessor corpusProcessor = new CorpusProcessor(CORPUS_FILENAME, ROW_SIZE, true);
+        corpusProcessor.start();
+        Map<String, Double> freqs = corpusProcessor.getFreq();
+        Set<String> dictSet = new TreeSet<>(); // the tokens order is preserved for TreeSet
         Map<Double, Set<String>> freqMap = new TreeMap<>(new Comparator<Double>() {
 
             @Override
             public int compare(Double o1, Double o2) {
                 return (int) (o2 - o1);
             }
-        });
+        }); // tokens of the same frequency fall under the same key, the order is reversed so the most frequent tokens go first
         for (Entry<String, Double> entry : freqs.entrySet()) {
             Set<String> set = freqMap.get(entry.getValue());
             if (set == null) {
-                set = new TreeSet<>();
+                set = new TreeSet<>(); // tokens of the same frequency would be sorted alphabetically
                 freqMap.put(entry.getValue(), set);
             }
             set.add(entry.getKey());
         }
         int cnt = 0;
         dictSet.addAll(dict.keySet());
+        // get most frequent tokens and put them to dictSet
         for (Entry<Double, Set<String>> entry : freqMap.entrySet()) {
             for (String val : entry.getValue()) {
                 if (dictSet.add(val) && ++cnt >= MAX_DICT) {
@@ -373,7 +374,10 @@ public class Main {
                 break;
             }
         }
+        // all of the above means that the dictionary with the same MAX_DICT constraint and made from the same source file will always be
+        // the same, the tokens always correspond to the same number so we don't need to save/restore the dictionary
         System.out.println("Dictionary is ready, size is " + dictSet.size());
+        // index the dictionary and build the reverse dictionary for lookups
         for (String word : dictSet) {
             if (!dict.containsKey(word)) {
                 dict.put(word, idx);
@@ -382,21 +386,21 @@ public class Main {
             }
         }
         System.out.println("Total dictionary size is " + dict.size() + ". Processing the dataset...");
-        logProcessor = new CorpusProcessor(CORPUS_FILENAME, ROW_SIZE, false) {
+        corpusProcessor = new CorpusProcessor(CORPUS_FILENAME, ROW_SIZE, false) {
             @Override
             protected void processLine(String lastLine) {
-                List<Double> wordIdxs = new ArrayList<>();
                 ArrayList<String> words = new ArrayList<>();
                 tokenizeLine(lastLine, words, true);
                 if (!words.isEmpty()) {
+                    List<Double> wordIdxs = new ArrayList<>();
                     if (wordsToIndexes(words, wordIdxs)) {
                         logs.add(wordIdxs);
                     }
                 }
             }
         };
-        logProcessor.setDict(dict);
-        logProcessor.start();
+        corpusProcessor.setDict(dict);
+        corpusProcessor.start();
         System.out.println("Done. Logs size is " + logs.size());
     }
 
