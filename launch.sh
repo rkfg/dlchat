@@ -1,2 +1,2 @@
 #!/bin/sh
-MAVEN_OPTS="-Xmx26G -XX:+UseG1GC" mvn clean compile exec:java -Dexec.mainClass="dlchat.Main"
+MAVEN_OPTS="-Xmx26G" mvn clean compile exec:java -Dexec.mainClass="dlchat.Main"
