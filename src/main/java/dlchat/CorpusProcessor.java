@@ -36,28 +36,30 @@ public class CorpusProcessor {
     public void start() throws IOException {
         try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             String line;
-            String lastNick = "";
+            String lastName = "";
             String lastLine = "";
             while ((line = br.readLine()) != null) {
-                String[] nickContent = line.toLowerCase().split(" \\+\\+\\+\\$\\+\\+\\+ ", 5);
-                if (nickContent.length > 4) {
-                    if (nickContent[1].equals(lastNick)) {
+                String[] lineSplit = line.toLowerCase().split(" \\+\\+\\+\\$\\+\\+\\+ ", 5);
+                if (lineSplit.length > 4) {
+                    // join consecuitive lines from the same speaker 
+                    if (lineSplit[1].equals(lastName)) {
                         if (!lastLine.isEmpty()) {
+                            // if the previous line doesn't end with a special symbol, append a comma and the current line
                             if (!SPECIALS.contains(lastLine.substring(lastLine.length() - 1))) {
                                 lastLine += ",";
                             }
-                            lastLine += " " + nickContent[4];
+                            lastLine += " " + lineSplit[4];
                         } else {
-                            lastLine = nickContent[4];
+                            lastLine = lineSplit[4];
                         }
                     } else {
                         if (lastLine.isEmpty()) {
-                            lastLine = nickContent[4];
+                            lastLine = lineSplit[4];
                         } else {
                             processLine(lastLine);
-                            lastLine = nickContent[4];
+                            lastLine = lineSplit[4];
                         }
-                        lastNick = nickContent[1];
+                        lastName = lineSplit[1];
                     }
                 }
             }
@@ -69,6 +71,7 @@ public class CorpusProcessor {
         tokenizeLine(lastLine, dictSet, false);
     }
 
+    // here we not only split the words but also store punctuation marks
     protected void tokenizeLine(String lastLine, Collection<String> resultCollection, boolean addSpecials) {
         String[] words = lastLine.split("[ \t]");
         for (String word : words) {

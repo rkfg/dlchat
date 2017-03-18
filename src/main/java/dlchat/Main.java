@@ -130,7 +130,7 @@ public class Main {
     private static final int ROW_SIZE = 40; // maximum line length in tokens
     private static final int GC_WINDOW = 2000; // delay between garbage collections, try to reduce if you run out of VRAM or increase for
                                                // better performance
-    private static final int MACROBATCH_SIZE = 20;
+    private static final int MACROBATCH_SIZE = 20; // see CorpusIterator
     private ComputationGraph net;
 
     public static void main(String[] args) throws IOException {
@@ -245,9 +245,10 @@ public class Main {
         try (Scanner scanner = new Scanner(System.in)) {
             while (true) {
                 System.out.print("In> ");
+                // input line is appended to conform to the corpus format
                 String line = "1 +++$+++ u11 +++$+++ m0 +++$+++ WALTER +++$+++ " + scanner.nextLine() + "\n";
-                CorpusProcessor dialogProcessor = new CorpusProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)), ROW_SIZE,
-                        false) {
+                CorpusProcessor dialogProcessor = new CorpusProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)),
+                        ROW_SIZE, false) {
                     @Override
                     protected void processLine(String lastLine) {
                         List<String> words = new ArrayList<>();

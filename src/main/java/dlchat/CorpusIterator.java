@@ -65,7 +65,7 @@ public class CorpusIterator implements MultiDataSetIterator {
         INDArray prediction = Nd4j.zeros(batchSize, dictSize, rowSize);
         INDArray decode = Nd4j.zeros(batchSize, dictSize, rowSize);
         INDArray inputMask = Nd4j.zeros(batchSize, rowSize);
-        INDArray predictionMask = Nd4j.zeros(batchSize, rowSize);
+        INDArray predictionMask = Nd4j.zeros(batchSize, rowSize); // this mask is also used for the decoder input, the length is the same
         int i = currentBatch * batchSize;
         for (int j = 0; j < batchSize; j++) {
             if (i > logs.size() - 2) {
@@ -74,19 +74,23 @@ public class CorpusIterator implements MultiDataSetIterator {
             List<Double> rowIn = new ArrayList<>(logs.get(i));
             Collections.reverse(rowIn);
             List<Double> rowPred = new ArrayList<>(logs.get(i + 1));
-            rowPred.add(1.0); // <eos>
+            rowPred.add(1.0); // add <eos> token
+            // replace the entire row in "input" using NDArrayIndex, it's faster than putScalar(); input is NOT made of one-hot vectors
+            // because of the embedding layer that accepts token indexes directly
             input.put(new INDArrayIndex[] { NDArrayIndex.point(j), NDArrayIndex.point(0), NDArrayIndex.interval(0, rowIn.size()) },
                     Nd4j.create(ArrayUtils.toPrimitive(rowIn.toArray(new Double[0]))));
             inputMask.put(new INDArrayIndex[] { NDArrayIndex.point(j), NDArrayIndex.interval(0, rowIn.size()) }, Nd4j.ones(rowIn.size()));
             predictionMask.put(new INDArrayIndex[] { NDArrayIndex.point(j), NDArrayIndex.interval(0, rowPred.size()) },
                     Nd4j.ones(rowPred.size()));
+            // prediction (output) and decode ARE one-hots though, I couldn't add an embedding layer on top of the decoder and I'm not sure
+            // it's a good idea either
             double predOneHot[][] = new double[dictSize][rowPred.size()];
             double decodeOneHot[][] = new double[dictSize][rowPred.size()];
-            decodeOneHot[2][0] = 1;
+            decodeOneHot[2][0] = 1; // <go> token
             int predIdx = 0;
             for (Double pred : rowPred) {
                 predOneHot[pred.intValue()][predIdx] = 1;
-                if (predIdx < rowPred.size() - 1) {
+                if (predIdx < rowPred.size() - 1) { // put the same vals to decode with +1 offset except the last token that is <eos>
                     decodeOneHot[pred.intValue()][predIdx + 1] = 1;
                 }
                 ++predIdx;
@@ -109,6 +113,7 @@ public class CorpusIterator implements MultiDataSetIterator {
 
     @Override
     public boolean resetSupported() {
+        // we don't want this iterator to be reset on each macrobatch pseudo-epoch
         return false;
     }
 
@@ -119,6 +124,7 @@ public class CorpusIterator implements MultiDataSetIterator {
 
     @Override
     public void reset() {
+        // but we still can do it manually before the epoch starts
         currentBatch = 0;
         currentMacroBatch = 0;
     }
