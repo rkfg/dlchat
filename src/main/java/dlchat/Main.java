@@ -54,6 +54,9 @@ public class Main {
      * on AdditionRNN but heavily changed to be used with a huge amount of possible tokens (10-20k), it also utilizes the decoder input
      * unlike AdditionRNN.
      * 
+     * Use the get_data.sh script to download, extract and optimize the train data. It's been only tested on Linux, it could work on OS X or
+     * even on Windows 10 in the Ubuntu shell.
+     * 
      * Special tokens used:
      * 
      * <unk> - replaces any word or other token that's not in the dictionary (too rare to be included or completely unknown)
@@ -97,8 +100,8 @@ public class Main {
      * response generation time. Then we put the decoder input (<go> for the first iteration) and the thought vector to the merge vertex
      * inputs and feed it forward. The result goes to the decoder layer, now with rnnTimeStep() method so that the internal layer state is
      * updated for the next iteration. The result is fed to the output softmax layer and then we sample it randomly (not with argMax(), it
-     * tends to give a lot of same tokens in a row). The resulting token is show to the user according to the dictionary and then goes to
-     * the next iteration as the decoder input and so on until we get <eos>.
+     * tends to give a lot of same tokens in a row). The resulting token is looked up in the dictionary, printed to the stdout and then it
+     * goes to the next iteration as the decoder input and so on until we get <eos>.
      *
      * JVM properties used:
      * 
@@ -163,6 +166,7 @@ public class Main {
             System.out.println("Creating a new network...");
             createComputationGraph();
         }
+        System.out.println("Number of parameters: " + net.numParams());
         net.setListeners(new ScoreIterationListener(1));
         train(networkFile);
     }
