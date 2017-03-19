@@ -45,7 +45,7 @@ import org.nd4j.linalg.api.ndarray.INDArray;
 import org.nd4j.linalg.factory.Nd4j;
 import org.nd4j.linalg.lossfunctions.LossFunctions;
 
-public class Main {
+public class EncoderDecoderLSTM {
 
     /*
      * This is a seq2seq encoder-decoder LSTM model made according to the Google's paper: [1] The model tries to predict the next dialog
@@ -103,13 +103,9 @@ public class Main {
      * tends to give a lot of same tokens in a row). The resulting token is looked up in the dictionary, printed to the stdout and then it
      * goes to the next iteration as the decoder input and so on until we get <eos>.
      *
-     * JVM properties used:
-     * 
-     * -Ddlchat.dialog to start the dialog (testing) mode
-     * 
-     * -Ddlchat.shift=1800 (for instance) to continue the training process from that batch number; batch numbers are printed after each
-     * processed macrobatch. If you changed the minibatch size after the last launch, recalculate the number accordingly, i.e. if you
-     * doubled the minibatch size, specify half of the value and so on.
+     * To continue the training process from a specific batch number, enter it when prompted; batch numbers are printed after each processed
+     * macrobatch. If you've changed the minibatch size after the last launch, recalculate the number accordingly, i.e. if you doubled the
+     * minibatch size, specify half of the value and so on.
      * 
      * [1] https://arxiv.org/abs/1506.05869 A Neural Conversational Model
      * 
@@ -135,16 +131,16 @@ public class Main {
                                                // dictionary) are replaced with <unk> token
     private static final int TBPTT_SIZE = 25;
     private static final double LEARNING_RATE = 1e-1;
-    private static final double L2 = 1e-3;
     private static final double RMS_DECAY = 0.95;
     private static final int ROW_SIZE = 40; // maximum line length in tokens
     private static final int GC_WINDOW = 2000; // delay between garbage collections, try to reduce if you run out of VRAM or increase for
                                                // better performance
     private static final int MACROBATCH_SIZE = 20; // see CorpusIterator
+    private static final boolean TMP_DATA_DIR = false;
     private ComputationGraph net;
 
     public static void main(String[] args) throws IOException {
-        new Main().run(args);
+        new EncoderDecoderLSTM().run(args);
     }
 
     private void run(String[] args) throws IOException {
@@ -153,13 +149,20 @@ public class Main {
 
         createDictionary();
 
-        File networkFile = new File(MODEL_FILENAME);
+        File networkFile = new File(toTempPath(MODEL_FILENAME));
+        int offset = 0;
         if (networkFile.exists()) {
             System.out.println("Loading the existing network...");
             net = ModelSerializer.restoreComputationGraph(networkFile);
-            if (System.getProperty("dlchat.dialog") != null) {
+            System.out.print("Enter d to start dialog or a number to continue training from that minibatch: ");
+            String input;
+            try (Scanner scanner = new Scanner(System.in)) {
+                input = scanner.nextLine();
+            }
+            if (input.toLowerCase().equals("d")) {
                 startDialog();
             } else {
+                offset = Integer.valueOf(input);
                 test();
             }
         } else {
@@ -168,7 +171,7 @@ public class Main {
         }
         System.out.println("Number of parameters: " + net.numParams());
         net.setListeners(new ScoreIterationListener(1));
-        train(networkFile);
+        train(networkFile, offset);
     }
 
     public void createComputationGraph() {
@@ -200,15 +203,14 @@ public class Main {
         net.init();
     }
 
-    private void train(File networkFile) throws IOException {
+    private void train(File networkFile, int offset) throws IOException {
         long lastSaveTime = System.currentTimeMillis();
         long lastTestTime = System.currentTimeMillis();
         CorpusIterator logsIterator = new CorpusIterator(corpus, MINIBATCH_SIZE, MACROBATCH_SIZE, dict.size(), ROW_SIZE);
         for (int epoch = 1; epoch < 10000; ++epoch) {
             System.out.println("Epoch " + epoch);
-            String shift = System.getProperty("dlchat.shift");
-            if (epoch == 1 && shift != null) {
-                logsIterator.setCurrentBatch(Integer.valueOf(shift));
+            if (epoch == 1) {
+                logsIterator.setCurrentBatch(offset);
             } else {
                 logsIterator.reset();
             }
@@ -267,7 +269,7 @@ public class Main {
 
     private void saveModel(File networkFile) throws IOException {
         System.out.println("Saving the model...");
-        File backup = new File(BACKUP_MODEL_FILENAME);
+        File backup = new File(toTempPath(BACKUP_MODEL_FILENAME));
         if (networkFile.exists()) {
             if (backup.exists()) {
                 backup.delete();
@@ -349,7 +351,7 @@ public class Main {
             }
         }
         System.out.println("Building the dictionary...");
-        CorpusProcessor corpusProcessor = new CorpusProcessor(CORPUS_FILENAME, ROW_SIZE, true);
+        CorpusProcessor corpusProcessor = new CorpusProcessor(toTempPath(CORPUS_FILENAME), ROW_SIZE, true);
         corpusProcessor.start();
         Map<String, Double> freqs = corpusProcessor.getFreq();
         Set<String> dictSet = new TreeSet<>(); // the tokens order is preserved for TreeSet
@@ -393,7 +395,7 @@ public class Main {
             }
         }
         System.out.println("Total dictionary size is " + dict.size() + ". Processing the dataset...");
-        corpusProcessor = new CorpusProcessor(CORPUS_FILENAME, ROW_SIZE, false) {
+        corpusProcessor = new CorpusProcessor(toTempPath(CORPUS_FILENAME), ROW_SIZE, false) {
             @Override
             protected void processLine(String lastLine) {
                 ArrayList<String> words = new ArrayList<>();
@@ -409,6 +411,13 @@ public class Main {
         corpusProcessor.setDict(dict);
         corpusProcessor.start();
         System.out.println("Done. Corpus size is " + corpus.size());
+    }
+
+    private String toTempPath(String path) {
+        if (!TMP_DATA_DIR) {
+            return path;
+        }
+        return System.getProperty("java.io.tmpdir") + "/" + path;
     }
 
 }
