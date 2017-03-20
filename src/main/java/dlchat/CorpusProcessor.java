@@ -22,6 +22,10 @@ public class CorpusProcessor {
     private boolean countFreq;
     private InputStream is;
     private int rowSize;
+    private String separator = " \\+\\+\\+\\$\\+\\+\\+ ";
+    private int fieldsCount = 5;
+    private int nameFieldIdx = 1;
+    private int textFieldIdx = 4;
 
     public CorpusProcessor(String filename, int rowSize, boolean countFreq) throws FileNotFoundException {
         this(new FileInputStream(filename), rowSize, countFreq);
@@ -33,14 +37,21 @@ public class CorpusProcessor {
         this.countFreq = countFreq;
     }
 
+    public void setFormatParams(String separator, int fieldsCount, int nameFieldIdx, int textFieldIdx){
+        this.separator = separator;
+        this.fieldsCount = fieldsCount;
+        this.nameFieldIdx = nameFieldIdx;
+        this.textFieldIdx = textFieldIdx;
+    }
+    
     public void start() throws IOException {
         try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             String line;
             String lastName = "";
             String lastLine = "";
             while ((line = br.readLine()) != null) {
-                String[] lineSplit = line.toLowerCase().split(" \\+\\+\\+\\$\\+\\+\\+ ", 5);
-                if (lineSplit.length > 4) {
+                String[] lineSplit = line.toLowerCase().split(separator, fieldsCount);
+                if (lineSplit.length >= fieldsCount) {
                     // join consecuitive lines from the same speaker 
                     if (lineSplit[1].equals(lastName)) {
                         if (!lastLine.isEmpty()) {
@@ -48,18 +59,18 @@ public class CorpusProcessor {
                             if (!SPECIALS.contains(lastLine.substring(lastLine.length() - 1))) {
                                 lastLine += ",";
                             }
-                            lastLine += " " + lineSplit[4];
+                            lastLine += " " + lineSplit[textFieldIdx];
                         } else {
-                            lastLine = lineSplit[4];
+                            lastLine = lineSplit[textFieldIdx];
                         }
                     } else {
                         if (lastLine.isEmpty()) {
-                            lastLine = lineSplit[4];
+                            lastLine = lineSplit[textFieldIdx];
                         } else {
                             processLine(lastLine);
-                            lastLine = lineSplit[4];
+                            lastLine = lineSplit[textFieldIdx];
                         }
-                        lastName = lineSplit[1];
+                        lastName = lineSplit[nameFieldIdx];
                     }
                 }
             }

@@ -216,9 +216,11 @@ public class EncoderDecoderLSTM {
             }
             int lastPerc = 0;
             while (logsIterator.hasNextMacrobatch()) {
+                long t1 = System.currentTimeMillis();
                 net.fit(logsIterator);
+                long t2 = System.currentTimeMillis();
                 logsIterator.nextMacroBatch();
-                System.out.println("Batch = " + logsIterator.batch());
+                System.out.println("Batch = " + logsIterator.batch() + "/" + logsIterator.totalBatches() + " time = " + (t2 - t1));
                 int newPerc = (logsIterator.batch() * 100 / logsIterator.totalBatches());
                 if (newPerc != lastPerc) {
                     System.out.println("Epoch complete: " + newPerc + "%");
@@ -242,7 +244,7 @@ public class EncoderDecoderLSTM {
             while (true) {
                 System.out.print("In> ");
                 // input line is appended to conform to the corpus format
-                String line = "1 +++$+++ u11 +++$+++ m0 +++$+++ WALTER +++$+++ " + scanner.nextLine() + "\n";
+                String line = appendInputLine(scanner.nextLine());
                 CorpusProcessor dialogProcessor = new CorpusProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)),
                         ROW_SIZE, false) {
                     @Override
@@ -261,10 +263,16 @@ public class EncoderDecoderLSTM {
                         }
                     }
                 };
+                setupCorpusProcessor(dialogProcessor);
                 dialogProcessor.setDict(dict);
                 dialogProcessor.start();
             }
         }
+    }
+
+    private String appendInputLine(String line) {
+        //return "1 +++$+++ u11 +++$+++ m0 +++$+++ WALTER +++$+++ " + line + "\n";
+        return "me|" + line + "\n";
     }
 
     private void saveModel(File networkFile) throws IOException {
@@ -352,6 +360,7 @@ public class EncoderDecoderLSTM {
         }
         System.out.println("Building the dictionary...");
         CorpusProcessor corpusProcessor = new CorpusProcessor(toTempPath(CORPUS_FILENAME), ROW_SIZE, true);
+        setupCorpusProcessor(corpusProcessor);
         corpusProcessor.start();
         Map<String, Double> freqs = corpusProcessor.getFreq();
         Set<String> dictSet = new TreeSet<>(); // the tokens order is preserved for TreeSet
@@ -408,9 +417,14 @@ public class EncoderDecoderLSTM {
                 }
             }
         };
+        setupCorpusProcessor(corpusProcessor);
         corpusProcessor.setDict(dict);
         corpusProcessor.start();
         System.out.println("Done. Corpus size is " + corpus.size());
+    }
+
+    private void setupCorpusProcessor(CorpusProcessor corpusProcessor) {
+        corpusProcessor.setFormatParams("\\|", 2, 0, 1);
     }
 
     private String toTempPath(String path) {
