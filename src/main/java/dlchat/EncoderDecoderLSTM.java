@@ -113,6 +113,10 @@ public class EncoderDecoderLSTM {
      * Neural Networks
      */
 
+    public enum SaveState {
+        NONE, READY, SAVING, SAVENOW
+    }
+
     private final Map<String, Double> dict = new HashMap<>();
     private final Map<Double, String> revDict = new HashMap<>();
     private final String CHARS = "-\\/_&" + CorpusProcessor.SPECIALS;
@@ -137,18 +141,37 @@ public class EncoderDecoderLSTM {
                                                // better performance
     private static final int MACROBATCH_SIZE = 20; // see CorpusIterator
     private static final boolean TMP_DATA_DIR = false;
+    private SaveState saveState = SaveState.NONE;
+    private static final boolean SAVE_ON_EXIT = true;
     private ComputationGraph net;
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) throws Exception {
         new EncoderDecoderLSTM().run(args);
     }
 
-    private void run(String[] args) throws IOException {
+    private void run(String[] args) throws Exception {
+        File networkFile = new File(toTempPath(MODEL_FILENAME));
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            @Override
+            public void run() {
+                if (SAVE_ON_EXIT && saveState == SaveState.READY) {
+                    saveState = SaveState.SAVENOW;
+                    System.out.println(
+                            "Wait for the current macrobatch to end, then the model will be saved and the program will terminate.");
+                    while (saveState != SaveState.READY) {
+                        try {
+                            Thread.sleep(100);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
+        });
         Nd4j.getMemoryManager().setAutoGcWindow(GC_WINDOW);
 
         createDictionary();
 
-        File networkFile = new File(toTempPath(MODEL_FILENAME));
         int offset = 0;
         if (networkFile.exists()) {
             System.out.println("Loading the existing network...");
@@ -157,12 +180,12 @@ public class EncoderDecoderLSTM {
             String input;
             try (Scanner scanner = new Scanner(System.in)) {
                 input = scanner.nextLine();
-            }
-            if (input.toLowerCase().equals("d")) {
-                startDialog();
-            } else {
-                offset = Integer.valueOf(input);
-                test();
+                if (input.toLowerCase().equals("d")) {
+                    startDialog(scanner);
+                } else {
+                    offset = Integer.valueOf(input);
+                    test();
+                }
             }
         } else {
             System.out.println("Creating a new network...");
@@ -202,7 +225,8 @@ public class EncoderDecoderLSTM {
         net.init();
     }
 
-    private void train(File networkFile, int offset) throws IOException {
+    private void train(File networkFile, int offset) throws Exception {
+        saveState = SaveState.READY;
         long lastSaveTime = System.currentTimeMillis();
         long lastTestTime = System.currentTimeMillis();
         CorpusIterator logsIterator = new CorpusIterator(corpus, MINIBATCH_SIZE, MACROBATCH_SIZE, dict.size(), ROW_SIZE);
@@ -219,11 +243,15 @@ public class EncoderDecoderLSTM {
                 net.fit(logsIterator);
                 long t2 = System.currentTimeMillis();
                 logsIterator.nextMacroBatch();
-                System.out.println("Batch = " + logsIterator.batch() + "/" + logsIterator.totalBatches() + " time = " + (t2 - t1));
+                System.out.println("Batch = " + logsIterator.batch() + " / " + logsIterator.totalBatches() + " time = " + (t2 - t1));
                 int newPerc = (logsIterator.batch() * 100 / logsIterator.totalBatches());
                 if (newPerc != lastPerc) {
                     System.out.println("Epoch complete: " + newPerc + "%");
                     lastPerc = newPerc;
+                }
+                if (saveState == SaveState.SAVENOW) {
+                    saveModel(networkFile);
+                    return;
                 }
                 if (System.currentTimeMillis() - lastSaveTime > SAVE_EACH_MS) {
                     saveModel(networkFile);
@@ -237,44 +265,43 @@ public class EncoderDecoderLSTM {
         }
     }
 
-    private void startDialog() throws IOException {
+    private void startDialog(Scanner scanner) throws IOException {
         System.out.println("Dialog started.");
-        try (Scanner scanner = new Scanner(System.in)) {
-            while (true) {
-                System.out.print("In> ");
-                // input line is appended to conform to the corpus format
-                String line = appendInputLine(scanner.nextLine());
-                CorpusProcessor dialogProcessor = new CorpusProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)),
-                        ROW_SIZE, false) {
-                    @Override
-                    protected void processLine(String lastLine) {
-                        List<String> words = new ArrayList<>();
-                        tokenizeLine(lastLine, words, true);
-                        List<Double> wordIdxs = new ArrayList<>();
-                        if (wordsToIndexes(words, wordIdxs)) {
-                            System.out.print("Got words: ");
-                            for (Double idx : wordIdxs) {
-                                System.out.print(revDict.get(idx) + " ");
-                            }
-                            System.out.println();
-                            System.out.print("Out> ");
-                            output(wordIdxs, true);
+        while (true) {
+            System.out.print("In> ");
+            // input line is appended to conform to the corpus format
+            String line = appendInputLine(scanner.nextLine());
+            CorpusProcessor dialogProcessor = new CorpusProcessor(new ByteArrayInputStream(line.getBytes(StandardCharsets.UTF_8)), ROW_SIZE,
+                    false) {
+                @Override
+                protected void processLine(String lastLine) {
+                    List<String> words = new ArrayList<>();
+                    tokenizeLine(lastLine, words, true);
+                    List<Double> wordIdxs = new ArrayList<>();
+                    if (wordsToIndexes(words, wordIdxs)) {
+                        System.out.print("Got words: ");
+                        for (Double idx : wordIdxs) {
+                            System.out.print(revDict.get(idx) + " ");
                         }
+                        System.out.println();
+                        System.out.print("Out> ");
+                        output(wordIdxs, true);
                     }
-                };
-                setupCorpusProcessor(dialogProcessor);
-                dialogProcessor.setDict(dict);
-                dialogProcessor.start();
-            }
+                }
+            };
+            setupCorpusProcessor(dialogProcessor);
+            dialogProcessor.setDict(dict);
+            dialogProcessor.start();
         }
     }
 
     private String appendInputLine(String line) {
-        //return "1 +++$+++ u11 +++$+++ m0 +++$+++ WALTER +++$+++ " + line + "\n";
-        return "me|" + line + "\n";
+        // return "1 +++$+++ u11 +++$+++ m0 +++$+++ WALTER +++$+++ " + line + "\n";
+        return "me¦" + line + "\n";
     }
 
     private void saveModel(File networkFile) throws IOException {
+        saveState = SaveState.SAVING;
         System.out.println("Saving the model...");
         File backup = new File(toTempPath(BACKUP_MODEL_FILENAME));
         if (networkFile.exists()) {
@@ -285,6 +312,7 @@ public class EncoderDecoderLSTM {
         }
         ModelSerializer.writeModel(net, networkFile, true);
         System.out.println("Done.");
+        saveState = SaveState.READY;
     }
 
     private void test() {
@@ -423,7 +451,7 @@ public class EncoderDecoderLSTM {
     }
 
     private void setupCorpusProcessor(CorpusProcessor corpusProcessor) {
-        corpusProcessor.setFormatParams("\\|", 2, 0, 1);
+        corpusProcessor.setFormatParams("¦", 2, 0, 1);
     }
 
     private String toTempPath(String path) {
