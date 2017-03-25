@@ -50,7 +50,7 @@ public class CorpusProcessor {
             String lastName = "";
             String lastLine = "";
             while ((line = br.readLine()) != null) {
-                String[] lineSplit = line.toLowerCase().split(separator, fieldsCount);
+                String[] lineSplit = line.trim().toLowerCase().split(separator, fieldsCount);
                 if (lineSplit.length >= fieldsCount) {
                     // join consecuitive lines from the same speaker 
                     if (lineSplit[1].equals(lastName)) {
