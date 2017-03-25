@@ -123,23 +123,24 @@ public class EncoderDecoderLSTM {
     private final Map<Double, String> revDict = new HashMap<>();
     private final String CHARS = "-\\/_&" + CorpusProcessor.SPECIALS;
     private List<List<Double>> corpus = new ArrayList<>();
-    private static final int HIDDEN_LAYER_WIDTH = 512; // this is purely empirical, affects performance and VRAM requirement
+    private static final int HIDDEN_LAYER_WIDTH = 1024; // this is purely empirical, affects performance and VRAM requirement
     private static final int EMBEDDING_WIDTH = 128; // one-hot vectors will be embedded to more dense vectors with this width
     private static final String CORPUS_FILENAME = "movie_lines.txt"; // filename of data corpus to learn
-    private static final String MODEL_FILENAME = "rnn_train.zip"; // filename of the model
-    private static final String BACKUP_MODEL_FILENAME = "rnn_train.bak.zip"; // filename of the previous version of the model (backup)
-    private static final int MINIBATCH_SIZE = 32;
+    private static final String MODEL_FILENAME = "rnn_train_movies.zip"; // filename of the model
+    private static final String BACKUP_MODEL_FILENAME = "rnn_train_movies.bak.zip"; // filename of the previous version of the model (backup)
+    private static final String DICTIONARY_FILENAME = "dictionary.txt";
+    private static final int MINIBATCH_SIZE = 16;
     private static final Random rnd = new Random(new Date().getTime());
-    private static final long SAVE_EACH_MS = TimeUnit.MINUTES.toMillis(5); // save the model with this period
+    private static final long SAVE_EACH_MS = TimeUnit.MINUTES.toMillis(10); // save the model with this period
     private static final long TEST_EACH_MS = TimeUnit.MINUTES.toMillis(1); // test the model with this period
-    private static final int MAX_DICT = 20000; // this number of most frequent words will be used, unknown words (that are not in the
+    private static final int MAX_DICT = 40000; // this number of most frequent words will be used, unknown words (that are not in the
                                                // dictionary) are replaced with <unk> token
     private static final int TBPTT_SIZE = 25;
-    private static final double LEARNING_RATE = 1e-1;
+    private static final double LEARNING_RATE = 1e-2;
     private static final double RMS_DECAY = 0.95;
-    private static final int ROW_SIZE = 40; // maximum line length in tokens
-    private static final int GC_WINDOW = 2000; // delay between garbage collections, try to reduce if you run out of VRAM or increase for
-                                               // better performance
+    private static final int ROW_SIZE = 20; // maximum line length in tokens
+    private static final int GC_WINDOW = 500; // delay between garbage collections, try to reduce if you run out of VRAM or increase for
+                                              // better performance
     private static final int MACROBATCH_SIZE = 20; // see CorpusIterator
     private static final boolean TMP_DATA_DIR = false;
     private SaveState saveState = SaveState.NONE;
@@ -301,8 +302,8 @@ public class EncoderDecoderLSTM {
     }
 
     private String appendInputLine(String line) {
-        // return "1 +++$+++ u11 +++$+++ m0 +++$+++ WALTER +++$+++ " + line + "\n";
-        return "me¦" + line + "\n";
+        return "1 +++$+++ u11 +++$+++ m0 +++$+++ WALTER +++$+++ " + line + "\n";
+        // return "me¦" + line + "\n";
     }
 
     private void saveModel(File networkFile, int batch) throws IOException {
@@ -461,7 +462,7 @@ public class EncoderDecoderLSTM {
     }
 
     private void setupCorpusProcessor(CorpusProcessor corpusProcessor) {
-        corpusProcessor.setFormatParams("¦", 2, 0, 1);
+        // corpusProcessor.setFormatParams("¦", 2, 0, 1);
     }
 
     private String toTempPath(String path) {
