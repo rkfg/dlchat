@@ -63,13 +63,21 @@ public class CorpusIterator implements MultiDataSetIterator {
     public MultiDataSet next(int num) {
         int i = currentBatch * batchSize;
         int currentBatchSize = Math.min(batchSize, corpus.size() - i - 1);
-        INDArray input = Nd4j.zeros(currentBatchSize, 1, rowSize);
-        INDArray prediction = Nd4j.zeros(currentBatchSize, dictSize, rowSize);
-        INDArray decode = Nd4j.zeros(currentBatchSize, dictSize, rowSize);
-        INDArray inputMask = Nd4j.zeros(currentBatchSize, rowSize);
+        int sequenceLength = 0;
+        for (int j = 0; j <= currentBatchSize; ++j) {
+            int size = corpus.get(i + j).size();
+            if (size > sequenceLength) {
+                sequenceLength = size;
+            }
+        }
+        sequenceLength = Math.min(rowSize, sequenceLength + 1);
+        INDArray input = Nd4j.zeros(currentBatchSize, 1, sequenceLength);
+        INDArray prediction = Nd4j.zeros(currentBatchSize, dictSize, sequenceLength);
+        INDArray decode = Nd4j.zeros(currentBatchSize, dictSize, sequenceLength);
+        INDArray inputMask = Nd4j.zeros(currentBatchSize, sequenceLength);
         // this mask is also used for the decoder input, the length is the same
-        INDArray predictionMask = Nd4j.zeros(currentBatchSize, rowSize);
-        for (int j = 0; j < currentBatchSize; j++) {
+        INDArray predictionMask = Nd4j.zeros(currentBatchSize, sequenceLength);
+        for (int j = 0; j < currentBatchSize; ++j) {
             List<Double> rowIn = new ArrayList<>(corpus.get(i));
             Collections.reverse(rowIn);
             List<Double> rowPred = new ArrayList<>(corpus.get(i + 1));
