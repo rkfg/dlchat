@@ -178,7 +178,9 @@ public class EncoderDecoderLSTM {
         if (networkFile.exists()) {
             System.out.println("Loading the existing network...");
             net = ModelSerializer.restoreComputationGraph(networkFile);
-            System.out.print("Enter d to start dialog or a number to continue training from that minibatch: ");
+            offset = net.getConfiguration().getIterationCount();
+            System.out.print("Enter d to start dialog or a number to continue training from that minibatch (press Enter to start from ["
+                    + offset + "]: ");
             String input;
             try (Scanner scanner = new Scanner(System.in)) {
                 input = scanner.nextLine();
