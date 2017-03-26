@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public class CorpusProcessor {
     public static final String SPECIALS = "!\"#$;%^:?*()[]{}<>«»,.–—=+…";
@@ -22,7 +23,7 @@ public class CorpusProcessor {
     private boolean countFreq;
     private InputStream is;
     private int rowSize;
-    private String separator = " \\+\\+\\+\\$\\+\\+\\+ ";
+    private String separator = " +++$+++ ";
     private int fieldsCount = 5;
     private int nameFieldIdx = 1;
     private int textFieldIdx = 4;
@@ -37,44 +38,44 @@ public class CorpusProcessor {
         this.countFreq = countFreq;
     }
 
-    public void setFormatParams(String separator, int fieldsCount, int nameFieldIdx, int textFieldIdx){
+    public void setFormatParams(String separator, int fieldsCount, int nameFieldIdx, int textFieldIdx) {
         this.separator = separator;
         this.fieldsCount = fieldsCount;
         this.nameFieldIdx = nameFieldIdx;
         this.textFieldIdx = textFieldIdx;
     }
-    
+
     public void start() throws IOException {
         try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
             String line;
             String lastName = "";
             String lastLine = "";
             while ((line = br.readLine()) != null) {
-                String[] lineSplit = line.trim().toLowerCase().split(separator, fieldsCount);
+                String[] lineSplit = line.split(Pattern.quote(separator), fieldsCount);
                 if (lineSplit.length >= fieldsCount) {
-                    // join consecuitive lines from the same speaker 
-                    if (lineSplit[1].equals(lastName)) {
+                    // join consecuitive lines from the same speaker
+                    String curLine = lineSplit[textFieldIdx];
+                    String curName = lineSplit[nameFieldIdx];
+                    if (curName.equals(lastName)) {
                         if (!lastLine.isEmpty()) {
                             // if the previous line doesn't end with a special symbol, append a comma and the current line
                             if (!SPECIALS.contains(lastLine.substring(lastLine.length() - 1))) {
                                 lastLine += ",";
                             }
-                            lastLine += " " + lineSplit[textFieldIdx];
+                            lastLine += " " + curLine;
                         } else {
-                            lastLine = lineSplit[textFieldIdx];
+                            lastLine = curLine;
                         }
                     } else {
-                        if (lastLine.isEmpty()) {
-                            lastLine = lineSplit[textFieldIdx];
-                        } else {
-                            processLine(lastLine);
-                            lastLine = lineSplit[textFieldIdx];
+                        if (!lastLine.isEmpty()) {
+                            processLine(lastLine.toLowerCase());
                         }
-                        lastName = lineSplit[nameFieldIdx];
+                        lastLine = curLine;
+                        lastName = curName;
                     }
                 }
             }
-            processLine(lastLine);
+            processLine(lastLine.toLowerCase());
         }
     }
 
