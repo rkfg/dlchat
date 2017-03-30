@@ -25,7 +25,6 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.ArrayUtils;
 import org.deeplearning4j.nn.api.Layer;
 import org.deeplearning4j.nn.api.OptimizationAlgorithm;
-import org.deeplearning4j.nn.conf.BackpropType;
 import org.deeplearning4j.nn.conf.ComputationGraphConfiguration.GraphBuilder;
 import org.deeplearning4j.nn.conf.GradientNormalization;
 import org.deeplearning4j.nn.conf.NeuralNetConfiguration;
@@ -135,9 +134,9 @@ public class EncoderDecoderLSTM {
     private static final long TEST_EACH_MS = TimeUnit.MINUTES.toMillis(1); // test the model with this period
     private static final int MAX_DICT = 40000; // this number of most frequent words will be used, unknown words (that are not in the
                                                // dictionary) are replaced with <unk> token
-    private static final int TBPTT_SIZE = 25;
     private static final double LEARNING_RATE = 1e-2;
     private static final double RMS_DECAY = 0.95;
+    private static final double L2 = 1e-5;
     private static final int ROW_SIZE = 20; // maximum line length in tokens
     private static final int GC_WINDOW = 500; // delay between garbage collections, try to reduce if you run out of VRAM or increase for
                                               // better performance
@@ -207,10 +206,10 @@ public class EncoderDecoderLSTM {
         NeuralNetConfiguration.Builder builder = new NeuralNetConfiguration.Builder();
         builder.iterations(1).learningRate(LEARNING_RATE).rmsDecay(RMS_DECAY)
                 .optimizationAlgo(OptimizationAlgorithm.STOCHASTIC_GRADIENT_DESCENT).miniBatch(true).updater(Updater.RMSPROP)
-                .weightInit(WeightInit.XAVIER).gradientNormalization(GradientNormalization.RenormalizeL2PerLayer);
+                .weightInit(WeightInit.XAVIER).gradientNormalization(GradientNormalization.RenormalizeL2PerLayer).regularization(true)
+                .l2(L2);
 
-        GraphBuilder graphBuilder = builder.graphBuilder().pretrain(false).backprop(true).backpropType(BackpropType.Standard)
-                .tBPTTBackwardLength(TBPTT_SIZE).tBPTTForwardLength(TBPTT_SIZE);
+        GraphBuilder graphBuilder = builder.graphBuilder().pretrain(false).backprop(true);
         graphBuilder.addInputs("inputLine", "decoderInput")
                 .setInputTypes(InputType.recurrent(dict.size()), InputType.recurrent(dict.size()))
                 .addLayer("embeddingEncoder", new EmbeddingLayer.Builder().nIn(dict.size()).nOut(EMBEDDING_WIDTH).build(), "inputLine")
